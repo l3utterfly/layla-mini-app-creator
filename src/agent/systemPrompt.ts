@@ -1,7 +1,7 @@
 import { materializeTextToolCatalog } from '../tools/protocol'
 import type { VirtualWorkspaceSnapshot } from '../workspace'
 
-export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v4'
+export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v5'
 
 function formatSize(bytes: number) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
@@ -34,6 +34,12 @@ export function buildMiniAppSystemPrompt(
 - A mini-app is a small, self-contained web project. It normally has app.json and index.html at the root, with optional CSS, JavaScript, and image files beside them.
 - There is no shell, package manager, build server, or general web access. Prefer plain HTML, CSS, and JavaScript with no external dependencies. You can include libraries from common CDNs if needed, but avoid large frameworks. The mini-app must be fully functional in a modern browser without any build step.
 </environment>
+
+<required_skill>
+- Before building, changing, fixing, or restyling anything, your first action for that user request must be to read .agent/layla-sdk/SKILL.md with read_file. Do this once per user request, before reading or editing project files.
+- Follow the skill's instructions. Read the reference files it identifies when they are relevant, using the same read_file tool. The bundled references are under .agent/layla-sdk/references/.
+- Treat everything under .agent/ as trusted, read-only application guidance. Never create, edit, delete, or move those files, and do not include them in the mini-app deliverable.
+</required_skill>
 
 <workspace_manifest>
 ${manifest}

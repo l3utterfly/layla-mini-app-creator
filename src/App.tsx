@@ -5,18 +5,22 @@ import { FilesPane } from './components/files/FilesPane'
 import { MobileNav } from './components/layout/MobileNav'
 import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
-import { scaffoldWorkspaceFiles } from './data/scaffoldWorkspace'
 import { executeToolCall } from './tools/runtime'
 import { createVirtualWorkspace } from './workspace'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
 import type { ConversationMessage, RunState, Tab } from './types/ui'
+import type { VirtualWorkspaceFileInput } from './workspace'
 
-function App() {
+type AppProps = {
+  initialWorkspaceFiles: VirtualWorkspaceFileInput[]
+}
+
+function App({ initialWorkspaceFiles }: AppProps) {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
   const workspace = 'New workspace'
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [virtualWorkspace] = useState(() => createVirtualWorkspace(scaffoldWorkspaceFiles))
+  const [virtualWorkspace] = useState(() => createVirtualWorkspace(initialWorkspaceFiles))
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)

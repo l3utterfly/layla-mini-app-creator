@@ -6,6 +6,10 @@ import {
   VirtualWorkspaceError,
 } from '../src/workspace/VirtualWorkspace.ts'
 import { scaffoldWorkspaceFiles } from '../src/data/scaffoldWorkspace.ts'
+import {
+  laylaSdkSkillAssets,
+  loadInitialWorkspaceFiles,
+} from '../src/data/initializeWorkspace.ts'
 
 test('ships a valid two-file Layla mini-app scaffold', () => {
   assert.deepEqual(scaffoldWorkspaceFiles.map(file => file.name), ['app.json', 'index.html'])
@@ -21,6 +25,27 @@ test('ships a valid two-file Layla mini-app scaffold', () => {
   assert.match(html, /cdn\.jsdelivr\.net\/npm\/@layla-network\/sdk@7\.3\.3\/\+esm/)
   assert.match(html, /layla\.contextual\.getExecutionContext\(\)/)
   assert.match(html, /console\.log\("\[Layla mini-app\] execution context:"/)
+})
+
+test('downloads the bundled Layla SDK skill into the virtual workspace on initialization', async () => {
+  const requests: Array<{ url: string; cache?: RequestCache }> = []
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    requests.push({ url, cache: init?.cache })
+    return new Response(`# downloaded from ${url}`, { status: 200 })
+  }) as typeof fetch
+
+  const files = await loadInitialWorkspaceFiles(fetcher)
+
+  assert.deepEqual(
+    files.map(file => file.name),
+    ['app.json', 'index.html', ...laylaSdkSkillAssets],
+  )
+  assert.deepEqual(
+    requests,
+    laylaSdkSkillAssets.map(path => ({ url: `/${path}`, cache: 'no-store' })),
+  )
+  assert.equal(files.at(-1)?.mimeType, 'text/markdown')
 })
 
 test('normalizes workspace-relative paths and rejects escapes', () => {

@@ -194,6 +194,8 @@ ${JSON.stringify({
     assert.match(systemPrompt, /"index\.html" \| text\/html/)
     assert.match(systemPrompt, /one or more complete <tool_call> envelopes/)
     assert.match(systemPrompt, /execute sequentially in the order emitted/)
+    assert.match(systemPrompt, /first action.*read \.agent\/layla-sdk\/SKILL\.md/i)
+    assert.match(systemPrompt, /trusted, read-only application guidance/)
     assert.equal(systemPrompt.includes('Hello, virtual workspace'), false)
 
     const listCall = parseToolCall(`<tool_call name="list_files">

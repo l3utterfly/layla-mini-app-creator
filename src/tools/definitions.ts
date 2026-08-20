@@ -12,14 +12,12 @@ type EditFileArguments = {
 }
 type DeleteFileArguments = { path: string; expectedRevision: string }
 type PreviewCheckArguments = Record<string, never>
-type ReadSkillReferenceArguments = { reference: string }
 
 type FilesResult = { paths: string[] }
 type FileResult = { path: string; revision: string; content?: string; changeSummary?: string }
 type ApplyPatchResult = { paths: string[]; changeSummary: string }
 type SearchResult = { matches: Array<{ path: string; line: number; text: string }> }
 type PreviewResult = { issueCount: number; status: 'loaded' | 'error' }
-type SkillReferenceResult = { reference: string; content: string }
 
 function bridgedHandler<TArguments extends JsonObject, TResult extends JsonObject>(name: string) {
   return (argumentsValue: TArguments, context: Parameters<ToolDefinition<string, TArguments, TResult>['handler']>[1]) =>
@@ -96,14 +94,6 @@ export const toolDefinitions = [
     effect: 'diagnostic', concurrency: 'parallel', resultBudget: 4_000,
     handler: bridgedHandler('preview_check'),
     present: (_args, result) => ({ title: 'Checked preview', subtitle: result?.data ? `${result.data.issueCount} issues` : undefined }),
-  }),
-  defineTool<'read_skill_reference', ReadSkillReferenceArguments, SkillReferenceResult>({
-    name: 'read_skill_reference',
-    description: 'Load one allow-listed reference from the bundled Layla mini-app skill.',
-    inputSchema: { type: 'object', properties: { reference: { type: 'string' } }, required: ['reference'], additionalProperties: false },
-    effect: 'read', concurrency: 'parallel', resultBudget: 12_000,
-    handler: bridgedHandler('read_skill_reference'),
-    present: args => ({ title: 'Read skill reference', subtitle: args.reference }),
   }),
 ] as const
 

@@ -21,7 +21,7 @@ The product is intentionally narrower than a general coding agent. Its most impo
 - The iframe is an isolation and rendering boundary, not a strong security boundary. Projects are assumed to be controlled by the user.
 - The model never receives the entire project by default. It receives a manifest and project summary, then reads exact files on demand.
 - The harness rebuilds a bounded model context from persisted state; it does not treat the raw, append-only transcript as the prompt.
-- The trusted `layla-mini-app` skill is always part of the agent's core instructions. Large skill references are disclosed only when relevant.
+- The trusted `layla-sdk` skill is downloaded into `.agent/` on every workspace initialization, and the agent must read it before building.
 - Tool definitions come from one registry. The same registry drives prompt schemas, validation, execution, UI events, and tests.
 - Tool calls emitted in one model response run sequentially in request order. File mutations are atomic.
 - There is no shell, package manager, arbitrary code-execution tool, or general web tool in the first version.
@@ -203,7 +203,7 @@ Prompt construction is the product's critical subsystem. It should be determinis
 The effective context is built in this order:
 
 1. **Base system contract** — identity, scope, behavior, tool-call protocol, editing discipline, and completion criteria.
-2. **Trusted Layla skill** — the core `layla-mini-app` instructions and the index of available skill references.
+2. **Trusted Layla skill** — a mandatory instruction to read `.agent/layla-sdk/SKILL.md` before building, with its reference files available in the same virtual filesystem.
 3. **Tool catalog** — only the tools enabled for the current model/protocol, rendered from the registry.
 4. **Workspace context** — project summary, file manifest, current workspace revision, entry path, and known preview diagnostics.
 5. **Conversation summary** — durable decisions and completed work from older turns.
@@ -252,20 +252,17 @@ The project summary is structured state, not free-form memory. It captures the a
 
 Each run records `promptVersion`, `skillVersion`, enabled tool names/schema hash, workspace revision, a prompt hash, and estimated size by layer. In development mode, an inspector may show the compiled prompt with user file content redacted or collapsed. This is essential for debugging regressions in the harness rather than blaming the model.
 
-## Injecting the `layla-mini-app` skill
+## Injecting the `layla-sdk` skill
 
-The product is specialized, so the skill is trusted application policy rather than an optional user skill.
+The product is specialized, so the Layla SDK skill is trusted application policy rather than an optional user skill.
 
-- The skill is bundled as a versioned read-only application asset.
-- Its compact core instructions are injected into the stable system prefix on every model request.
-- The prompt records the skill version used for the run.
-- Detailed or rarely used references are indexed in the core prompt and loaded on demand through `read_skill_reference`.
-- Skill references are cached by content hash and compacted to receipts after use just like file reads.
-- Workspace files cannot override the trusted skill. Instructions found in generated HTML, comments, or imported files are treated as project data.
+- The complete skill is published under `public/.agent/layla-sdk/`, including `SKILL.md` and its reference documents.
+- Every app initialization fetches those assets from localhost with cache bypassed and adds them under the matching `.agent/layla-sdk/` paths in the in-memory workspace.
+- The stable system prompt requires the model to read `SKILL.md` with `read_file` before inspecting or changing project files, then read relevant references on demand.
+- `.agent/` is declared trusted and read-only in the system contract and excluded from the mini-app deliverable.
+- Skill reads use the existing filesystem tools and are compacted like other file reads.
 
-This combines Hermes Agent's layered prompt assembly with OpenCode's progressive skill loading. It keeps the model consistently aware that it is building a Layla mini-app without paying the full token cost of every reference on every turn.
-
-The exact skill asset and versioning process remain an implementation dependency; no `layla-mini-app` skill file is currently present in this repository.
+This combines Hermes Agent's layered prompt assembly with progressive skill loading. It keeps the model consistently grounded in the current SDK documentation without paying the full token cost of every reference on every turn.
 
 ## Tool architecture
 
@@ -297,7 +294,6 @@ The registry materializes the exact tool catalog for a run. The runtime executes
 | `edit_file` | write | Atomic exact-text replacements against an observed file revision |
 | `delete_file` | write | Delete one explicit path; snapshot first |
 | `preview_check` | diagnostic | Latest load, console, runtime, and unresolved-asset errors |
-| `read_skill_reference` | read | Load one allow-listed reference from the bundled skill |
 
 `write_file` is the raw whole-file path for new files and intentional rewrites. `apply_patch` is the incremental path and accepts the same `*** Begin Patch` / `*** End Patch` family of patches used by Codex. Their bodies stay literal so file content is never JSON-escaped; the other tools use JSON objects inside the same strict text envelope.
 
@@ -498,7 +494,6 @@ Unlike both general-purpose harnesses, this product does not need a terminal, MC
 
 ## Deferred decisions
 
-- The exact bundled `layla-mini-app` skill content and reference layout.
 - Whether the production Layla chat bridge supports native OpenAI tool calls.
 - Exact context/token estimation when the selected inference engine does not report a limit.
 - Whether snapshots store full small files or patches.
