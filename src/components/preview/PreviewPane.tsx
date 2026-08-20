@@ -149,7 +149,6 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
           <div className="device-screen">{preview}</div>
           <div className="device-home" />
         </div>
-        <p className="viewport-label">390 × 844 · Mobile</p>
       </div>
       {logsPanel}
     </section>
