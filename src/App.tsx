@@ -35,7 +35,7 @@ function App() {
       />
 
       <main className="workspace-layout">
-        <ChatPane active={activeTab === 'chat'} runState={runState} onRunStateChange={setRunState} />
+        <ChatPane active={activeTab === 'chat'} workspace={workspace} runState={runState} onRunStateChange={setRunState} />
         <PreviewPane active={activeTab === 'preview'} workspace={workspace} />
         <FilesPane active={activeTab === 'files'} />
       </main>

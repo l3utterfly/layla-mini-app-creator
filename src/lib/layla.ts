@@ -17,6 +17,7 @@ type ChatCompletionResponse = {
   choices?: Array<{
     message?: {
       content?: string | null
+      reasoning_content?: string | null
     }
   }>
   error?: {
@@ -55,6 +56,10 @@ async function requestLocalCompletion(messages: LaylaChatMessage[]) {
       model: llamaModel,
       messages: messages.map(toOpenAIMessage),
       stream: false,
+      chat_template_kwargs: {
+        enable_thinking: true,
+      },
+      reasoning_format: 'deepseek',
     }),
   })
 
@@ -63,12 +68,14 @@ async function requestLocalCompletion(messages: LaylaChatMessage[]) {
     throw new Error(payload.error?.message || `llama-server returned HTTP ${response.status}`)
   }
 
-  const content = payload.choices?.[0]?.message?.content
-  if (typeof content !== 'string') {
+  const message = payload.choices?.[0]?.message
+  const content = message?.content ?? ''
+  const reasoning = message?.reasoning_content ?? ''
+  if (!content && !reasoning) {
     throw new Error('llama-server returned a completion without assistant content')
   }
 
-  return content
+  return reasoning ? `<think>${reasoning}</think>${content}` : content
 }
 
 if (import.meta.env.DEV) {

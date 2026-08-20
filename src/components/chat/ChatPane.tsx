@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { LaylaAbortError } from '@layla-network/sdk'
+import { buildMiniAppSystemPrompt } from '../../agent/systemPrompt'
 import { layla } from '../../lib/layla'
 import type { RunState } from '../../types/ui'
 import { AssistantMessage } from './AssistantMessage'
@@ -9,11 +10,12 @@ import { Icon } from '../common/Icon'
 
 type ChatPaneProps = {
   active: boolean
+  workspace: string
   runState: RunState
   onRunStateChange: (state: RunState) => void
 }
 
-export function ChatPane({ active, runState, onRunStateChange }: ChatPaneProps) {
+export function ChatPane({ active, workspace, runState, onRunStateChange }: ChatPaneProps) {
   const [composer, setComposer] = useState('')
   const [sentPrompt, setSentPrompt] = useState<string | null>(null)
   const [assistantResponse, setAssistantResponse] = useState('')
@@ -38,7 +40,7 @@ export function ChatPane({ active, runState, onRunStateChange }: ChatPaneProps) 
       messages: [
         {
           role: 'system',
-          content: 'You are Layla, a concise coding assistant helping build a small Layla mini-app.',
+          content: buildMiniAppSystemPrompt(workspace),
         },
         { role: 'user', content: prompt },
       ],
@@ -80,14 +82,14 @@ export function ChatPane({ active, runState, onRunStateChange }: ChatPaneProps) 
             <AssistantMessage live>
               {runState === 'thinking' ? (
                 assistantResponse
-                  ? <p>{assistantResponse}</p>
+                  ? <pre className="raw-assistant-output">{assistantResponse}</pre>
                   : <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Waiting for the model…</span></div>
               ) : runState === 'cancelled' ? (
                 <p className="cancelled-copy">{assistantResponse || 'Stopped. Your workspace is unchanged.'}</p>
               ) : runState === 'error' ? (
                 <p className="cancelled-copy">{runError || 'The inference request failed.'}</p>
               ) : (
-                <><p>{assistantResponse}</p><div className="compact-success"><Icon name="check" size={14} /> Response complete</div></>
+                <><pre className="raw-assistant-output">{assistantResponse}</pre><div className="compact-success"><Icon name="check" size={14} /> Raw response complete</div></>
               )}
             </AssistantMessage>
           </>
