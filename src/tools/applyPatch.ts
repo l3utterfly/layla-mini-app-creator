@@ -1,5 +1,3 @@
-import type { WorkspaceFile } from '../types/ui'
-
 type PatchHunk = {
   header: string
   lines: string[]
@@ -162,17 +160,22 @@ function applyUpdate(path: string, content: string, hunks: PatchHunk[]) {
   return source.join(newline)
 }
 
-export type AppliedWorkspacePatch = {
-  files: WorkspaceFile[]
+type PatchableWorkspaceFile = {
+  name: string
+  content: string
+}
+
+export type AppliedWorkspacePatch<TFile extends PatchableWorkspaceFile> = {
+  files: TFile[]
   changedPaths: string[]
 }
 
-export function applyWorkspacePatch(
-  files: WorkspaceFile[],
+export function applyWorkspacePatch<TFile extends PatchableWorkspaceFile>(
+  files: readonly TFile[],
   patch: string,
   normalizePath: (path: string) => string,
-  createFile: (path: string, content: string) => WorkspaceFile,
-): AppliedWorkspacePatch {
+  createFile: (path: string, content: string) => TFile,
+): AppliedWorkspacePatch<TFile> {
   const operations = parsePatch(patch)
   const staged = new Map(files.map(file => [file.name, file]))
   const changedPaths: string[] = []

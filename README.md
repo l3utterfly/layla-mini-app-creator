@@ -85,8 +85,8 @@ Production builds do not install the mock; the same `LaylaSDK` client uses the L
 └──────────┬───────┘ └──────┬────────┘ └────────┬──────────┘
            │                │                   │
 ┌──────────▼────────────────▼───────────────────▼───────────┐
-│                   Workspace Repository                    │
-│ IndexedDB: files, revisions, sessions, parts, snapshots   │
+│                   Virtual Workspace                       │
+│ in-memory files │ revisions │ snapshots │ subscriptions   │
 └──────────┬────────────────────────────────────────────────┘
            │ compiled messages
 ┌──────────▼────────────────────────────────────────────────┐
@@ -105,7 +105,7 @@ These are in-process module boundaries, not separately deployed services. We bor
 
 A workspace is the isolation boundary for a site. Tools are bound to one active workspace when an agent run starts and cannot address another workspace by ID or path.
 
-Suggested persisted entities:
+Workspace-facing entities:
 
 | Entity | Important fields |
 | --- | --- |
@@ -116,7 +116,7 @@ Suggested persisted entities:
 | `Snapshot` | `id`, `workspaceId`, parent revision, changed paths, before/after data or reversible patch |
 | `Run` | `id`, `sessionId`, state, model/engine metadata, prompt hash, token estimate, timestamps |
 
-IndexedDB is preferred because it supports larger values, blobs, indexes, and transactions. A file mutation and its snapshot must commit in one transaction.
+Agent-created and agent-updated files live in `VirtualWorkspace`, an isolated in-memory filesystem. It exposes filesystem-shaped reads, writes, searches, deletes, patches, snapshots, subscriptions, and transactions without touching the host filesystem. Every mutation is revisioned, and a multi-file patch or explicit transaction commits atomically. Persistence, import, and export can operate on snapshots without changing tool callers.
 
 Workspace UI operations include create, rename, duplicate, import, export, and delete. Deletion requires direct user confirmation and is not an LLM tool. Switching workspaces cancels or finishes the current run before rebinding the agent.
 

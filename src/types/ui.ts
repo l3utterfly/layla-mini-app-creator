@@ -1,4 +1,5 @@
 import type { ToolRunGroup } from '../tools/types'
+import type { VirtualWorkspaceFile } from '../workspace'
 
 export type Tab = 'chat' | 'preview' | 'files'
 
@@ -10,13 +11,7 @@ export type WorkspaceOption = {
   colorClass: string
 }
 
-export type WorkspaceFile = {
-  name: string
-  type: string
-  size: string
-  color: string
-  content: string
-}
+export type WorkspaceFile = VirtualWorkspaceFile
 
 export type ConversationMessage = {
   id: string

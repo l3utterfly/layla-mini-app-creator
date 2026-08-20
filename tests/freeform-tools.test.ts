@@ -6,9 +6,17 @@ import {
   parseFreeformToolEnvelope,
   serializeFreeformToolEnvelope,
 } from '../src/tools/freeformEnvelope.ts'
-import type { WorkspaceFile } from '../src/types/ui.ts'
+import type { VirtualWorkspaceFile } from '../src/workspace/VirtualWorkspace.ts'
 
-function createFile(path: string, content: string): WorkspaceFile {
+type PatchTestFile = {
+  name: string
+  content: string
+  size: string
+  type: string
+  color: string
+}
+
+function createFile(path: string, content: string): PatchTestFile {
   return { name: path, content, size: `${content.length} B`, type: 'TEXT', color: '#fff' }
 }
 
@@ -94,7 +102,7 @@ test('protocol and runtime execute both freeform tools end to end', async () => 
   try {
     const { parseToolCall } = await server.ssrLoadModule('/src/tools/protocol.ts')
     const { executeToolCall } = await server.ssrLoadModule('/src/tools/runtime.ts')
-    const workspace = { files: [] as WorkspaceFile[], revision: 1 }
+    const workspace = { files: [] as VirtualWorkspaceFile[], revision: 1 }
     const writeEnvelope = `<tool_call name="write_file" path="index.html">
 <h1 data-label="raw">Hello</h1>
 </tool_call>`

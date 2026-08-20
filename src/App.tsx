@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChatPane } from './components/chat/ChatPane'
 import { DebugPanel } from './components/debug/DebugPanel'
 import { FilesPane } from './components/files/FilesPane'
@@ -7,18 +7,24 @@ import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
 import { workspaceFiles } from './data/mockWorkspace'
 import { executeToolCall } from './tools/runtime'
+import { createVirtualWorkspace } from './workspace'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
-import type { ConversationMessage, RunState, Tab, WorkspaceFile } from './types/ui'
+import type { ConversationMessage, RunState, Tab } from './types/ui'
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
   const [workspace, setWorkspace] = useState('Quiet Weather')
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [files, setFiles] = useState<WorkspaceFile[]>(() => workspaceFiles.map(file => ({ ...file })))
+  const [virtualWorkspace] = useState(() => createVirtualWorkspace(workspaceFiles))
+  const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
-  const workspaceSnapshot = useRef({ files, revision: 1 })
+
+  useEffect(
+    () => virtualWorkspace.subscribe(snapshot => setFiles(snapshot.files)),
+    [virtualWorkspace],
+  )
 
   const selectTab = (tab: Tab) => {
     setActiveTab(tab)
@@ -31,9 +37,7 @@ function App() {
   }
 
   const runTool = async (call: ToolCall): Promise<ToolResultEnvelope> => {
-    const execution = await executeToolCall(call, workspaceSnapshot.current)
-    workspaceSnapshot.current = execution.workspace
-    setFiles(execution.workspace.files)
+    const execution = await executeToolCall(call, virtualWorkspace)
     return execution.result
   }
 

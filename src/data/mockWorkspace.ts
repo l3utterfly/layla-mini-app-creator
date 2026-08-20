@@ -1,4 +1,5 @@
-import type { WorkspaceFile, WorkspaceOption } from '../types/ui'
+import type { VirtualWorkspaceFileInput } from '../workspace'
+import type { WorkspaceOption } from '../types/ui'
 
 export const workspaceOptions: WorkspaceOption[] = [
   { name: 'Quiet Weather', edited: 'Edited just now', colorClass: 'w1' },
@@ -6,12 +7,9 @@ export const workspaceOptions: WorkspaceOption[] = [
   { name: 'Daily Focus', edited: 'Edited 4 days ago', colorClass: 'w3' },
 ]
 
-export const workspaceFiles: WorkspaceFile[] = [
+export const workspaceFiles: VirtualWorkspaceFileInput[] = [
   {
     name: 'app.json',
-    type: 'JSON',
-    size: '312 B',
-    color: '#f5c451',
     content: `{
   "title": "Quiet Weather",
   "tagline": "A softer way to check the sky.",
@@ -21,9 +19,6 @@ export const workspaceFiles: WorkspaceFile[] = [
   },
   {
     name: 'index.html',
-    type: 'HTML',
-    size: '4.8 KB',
-    color: '#ff7b72',
     content: `<main class="weather-card">
   <header>
     <span>Hangzhou</span>
@@ -39,9 +34,6 @@ export const workspaceFiles: WorkspaceFile[] = [
   },
   {
     name: 'styles.css',
-    type: 'CSS',
-    size: '3.1 KB',
-    color: '#47a6ff',
     content: `:root {
   color-scheme: dark;
   --sky: #293c55;
@@ -57,9 +49,6 @@ export const workspaceFiles: WorkspaceFile[] = [
   },
   {
     name: 'app.js',
-    type: 'JS',
-    size: '2.4 KB',
-    color: '#e9d34f',
     content: `const forecast = [
   { time: 'Now', temp: 24, rain: 72 },
   { time: '10 PM', temp: 23, rain: 64 },
