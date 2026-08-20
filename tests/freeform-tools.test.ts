@@ -95,13 +95,14 @@ test('apply_patch rejects ambiguous context', () => {
   )
 })
 
-test('protocol and runtime execute both freeform tools end to end', async () => {
+test('model protocol executes virtual workspace tools end to end', async () => {
   const { createServer } = await import('vite')
   const server = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } })
 
   try {
     const { parseToolCall } = await server.ssrLoadModule('/src/tools/protocol.ts')
     const { executeToolCall } = await server.ssrLoadModule('/src/tools/runtime.ts')
+    const { buildMiniAppSystemPrompt } = await server.ssrLoadModule('/src/agent/systemPrompt.ts')
     const workspace = { files: [] as VirtualWorkspaceFile[], revision: 1 }
     const writeEnvelope = `<tool_call name="write_file" path="index.html">
 <h1 data-label="raw">Hello</h1>
@@ -132,6 +133,67 @@ test('protocol and runtime execute both freeform tools end to end', async () => 
     assert.equal(patched.result.ok, true)
     assert.deepEqual(patched.result.changedPaths, ['index.html'])
     assert.equal(patched.workspace.files[0]?.content, '<h1 data-label="raw">Hello, Layla</h1>')
+
+    const readCall = parseToolCall(`<tool_call name="read_file">
+{"path":"index.html"}
+</tool_call>`, 'call_read')
+    assert.equal(readCall.ok, true)
+    if (!readCall.ok) return
+
+    const read = await executeToolCall(readCall.call, patched.workspace)
+    assert.equal(read.result.ok, true)
+    assert.equal(read.result.data?.content, '<h1 data-label="raw">Hello, Layla</h1>')
+    const fileRevision = String(read.result.data?.revision)
+
+    const editCall = parseToolCall(`<tool_call name="edit_file">
+${JSON.stringify({
+  path: 'index.html',
+  expectedRevision: fileRevision,
+  replacements: [{ oldText: 'Hello, Layla', newText: 'Hello, virtual workspace' }],
+})}
+</tool_call>`, 'call_edit')
+    assert.equal(editCall.ok, true)
+    if (!editCall.ok) return
+
+    const edited = await executeToolCall(editCall.call, read.workspace)
+    assert.equal(edited.result.ok, true)
+    assert.equal(edited.workspace.files[0]?.content, '<h1 data-label="raw">Hello, virtual workspace</h1>')
+
+    const searchCall = parseToolCall(`<tool_call name="search_files">
+{"query":"virtual workspace"}
+</tool_call>`, 'call_search')
+    assert.equal(searchCall.ok, true)
+    if (!searchCall.ok) return
+
+    const searched = await executeToolCall(searchCall.call, edited.workspace)
+    assert.deepEqual(searched.result.data?.matches, [{
+      path: 'index.html',
+      line: 1,
+      text: '<h1 data-label="raw">Hello, virtual workspace</h1>',
+    }])
+
+    const systemPrompt = buildMiniAppSystemPrompt('Test Workspace', searched.workspace)
+    assert.match(systemPrompt, /Workspace: "Test Workspace" \(revision 4\)/)
+    assert.match(systemPrompt, /"read_file"/)
+    assert.match(systemPrompt, /"index\.html" \| text\/html/)
+    assert.equal(systemPrompt.includes('Hello, virtual workspace'), false)
+
+    const listCall = parseToolCall(`<tool_call name="list_files">
+{}
+</tool_call>`, 'call_list')
+    assert.equal(listCall.ok, true)
+    if (!listCall.ok) return
+    const listed = await executeToolCall(listCall.call, searched.workspace)
+    assert.deepEqual(listed.result.data?.paths, ['index.html'])
+
+    const deleteCall = parseToolCall(`<tool_call name="delete_file">
+${JSON.stringify({ path: 'index.html', expectedRevision: edited.result.data?.revision })}
+</tool_call>`, 'call_delete')
+    assert.equal(deleteCall.ok, true)
+    if (!deleteCall.ok) return
+    const deleted = await executeToolCall(deleteCall.call, listed.workspace)
+    assert.equal(deleted.result.ok, true)
+    assert.deepEqual(deleted.workspace.files, [])
   } finally {
     await server.close()
   }

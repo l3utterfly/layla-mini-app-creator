@@ -6,6 +6,7 @@ import { layla } from '../../lib/layla'
 import { parseToolCall } from '../../tools/protocol'
 import type { ToolCall, ToolResultEnvelope, ToolRunGroup } from '../../tools/types'
 import type { ConversationMessage, RunState } from '../../types/ui'
+import type { VirtualWorkspaceSnapshot } from '../../workspace'
 import { AssistantMessage } from './AssistantMessage'
 import { Composer } from './Composer'
 import { ToolCallCard } from './ToolCallCard'
@@ -19,6 +20,7 @@ type ChatPaneProps = {
   onMessagesChange: Dispatch<SetStateAction<ConversationMessage[]>>
   onRunStateChange: (state: RunState) => void
   onRunTool: (call: ToolCall) => Promise<ToolResultEnvelope>
+  getWorkspaceSnapshot: () => VirtualWorkspaceSnapshot
 }
 
 let nextMessageNumber = 1
@@ -43,6 +45,7 @@ export function ChatPane({
   onMessagesChange,
   onRunStateChange,
   onRunTool,
+  getWorkspaceSnapshot,
 }: ChatPaneProps) {
   const [composer, setComposer] = useState('')
   const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
@@ -95,7 +98,10 @@ export function ChatPane({
         let reasoningSnapshot = ''
         const stream = layla.chat.completions.stream({
           messages: [
-            { role: 'system', content: buildMiniAppSystemPrompt(workspace) },
+            {
+              role: 'system',
+              content: buildMiniAppSystemPrompt(workspace, getWorkspaceSnapshot()),
+            },
             ...contextMessages.current,
           ],
         })
@@ -148,7 +154,7 @@ export function ChatPane({
           continue
         }
 
-        if (finalContent.includes('<tool_call>')) {
+        if (finalContent.includes('<tool_call')) {
           contextMessages.current.push({
             role: 'user',
             content: `<tool_result>${JSON.stringify({ ok: false, error: { code: 'INVALID_TOOL_CALL', message: parsed.error } })}</tool_result>`,

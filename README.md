@@ -294,11 +294,12 @@ The registry materializes the exact tool catalog for a run. The runtime executes
 | `search_files` | read | Exact text/regex search with bounded matching lines |
 | `write_file` | write | Create or intentionally replace a file; requires expected revision when replacing |
 | `apply_patch` | write | Atomic Codex-style add, update, and delete operations across one or more files |
+| `edit_file` | write | Atomic exact-text replacements against an observed file revision |
 | `delete_file` | write | Delete one explicit path; snapshot first |
 | `preview_check` | diagnostic | Latest load, console, runtime, and unresolved-asset errors |
 | `read_skill_reference` | read | Load one allow-listed reference from the bundled skill |
 
-`write_file` is the raw whole-file path for new files and intentional rewrites. `apply_patch` is the incremental path and accepts the same `*** Begin Patch` / `*** End Patch` family of patches used by Codex. The active prompt teaches only these two mutation dialects so models do not have to choose among overlapping edit tools.
+`write_file` is the raw whole-file path for new files and intentional rewrites. `apply_patch` is the incremental path and accepts the same `*** Begin Patch` / `*** End Patch` family of patches used by Codex. Their bodies stay literal so file content is never JSON-escaped; the other tools use JSON objects inside the same strict text envelope.
 
 Workspace create/delete/switch, import/export, and Undo are user commands, not agent tools.
 

@@ -64,6 +64,7 @@ function App() {
           onMessagesChange={setMessages}
           onRunStateChange={setRunState}
           onRunTool={runTool}
+          getWorkspaceSnapshot={() => virtualWorkspace.snapshot()}
         />
         <PreviewPane active={activeTab === 'preview'} workspace={workspace} />
         <FilesPane active={activeTab === 'files'} files={files} />
