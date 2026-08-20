@@ -250,7 +250,10 @@ export class VirtualWorkspace {
     const limit = Math.max(0, Math.floor(options.limit ?? 100))
     const matches: FileSearchMatch[] = []
     if (limit === 0) return matches
-    for (const file of this.listFiles(options.path)) {
+    const scopedPath = normalizeDirectoryPath(options.path)
+    const exactFile = scopedPath ? this.#files.get(scopedPath) : undefined
+    const files = exactFile ? [cloneFile(exactFile)] : this.listFiles(scopedPath)
+    for (const file of files) {
       for (const [index, text] of file.content.split('\n').entries()) {
         if (matcher.test(text)) matches.push({ path: file.name, line: index + 1, text })
         if (matches.length >= limit) return matches

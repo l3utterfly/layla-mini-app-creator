@@ -288,7 +288,7 @@ ${JSON.stringify({
     assert.equal(edited.workspace.files[0]?.content, '<h1 data-label="raw">Hello, virtual workspace</h1>')
 
     const searchCall = parseToolCall(`<tool_call name="search_files">
-{"query":"virtual workspace"}
+{"query":"virtual workspace","path":"index.html","isRegex":false}
 </tool_call>`, 'call_search')
     assert.equal(searchCall.ok, true)
     if (!searchCall.ok) return

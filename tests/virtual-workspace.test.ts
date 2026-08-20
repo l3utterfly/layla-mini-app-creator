@@ -109,6 +109,32 @@ test('searches with regular expressions by default and supports explicit literal
   )
 })
 
+test('search path automatically scopes to an exact file or a directory', () => {
+  const workspace = new VirtualWorkspace([
+    { name: '.agent/layla-sdk/references/sdk-api.md', content: 'layla.characters.list()' },
+    { name: '.agent/layla-sdk/references/other.md', content: 'characters elsewhere' },
+    { name: 'index.html', content: 'characters outside the reference directory' },
+  ])
+
+  assert.deepEqual(
+    workspace.searchFiles('characters', {
+      path: '.agent/layla-sdk/references/sdk-api.md',
+      isRegex: false,
+    }).map(match => match.path),
+    ['.agent/layla-sdk/references/sdk-api.md'],
+  )
+  assert.deepEqual(
+    workspace.searchFiles('characters', {
+      path: '.agent/layla-sdk/references',
+      isRegex: false,
+    }).map(match => match.path),
+    [
+      '.agent/layla-sdk/references/other.md',
+      '.agent/layla-sdk/references/sdk-api.md',
+    ],
+  )
+})
+
 test('returns defensive copies and rejects stale writes', () => {
   const workspace = new VirtualWorkspace([{ name: 'index.html', content: 'original' }])
   const snapshot = workspace.snapshot()
