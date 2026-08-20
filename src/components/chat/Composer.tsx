@@ -44,8 +44,9 @@ export function Composer({ value, runState, onChange, onSubmit, onStop }: Compos
           <textarea ref={textarea} value={value} onChange={event => onChange(event.target.value)} placeholder="Ask Layla to build something…" rows={1} aria-label="Message Layla" onKeyDown={submitOnEnter} />
         )}
         <div className="composer-actions">
+          {/* Attachment support will be added in a future release.
           <button type="button" className="attach-button" aria-label="Attach context" disabled={isWorking}><Icon name="attach" size={19} /></button>
-          <div className="context-chip"><span className="context-dot" /> index.html <button type="button" aria-label="Remove context" disabled={isWorking}><Icon name="x" size={12} /></button></div>
+          */}
           {isWorking ? (
             <button type="button" className="send-button stop-button" aria-label="Stop generation" onClick={onStop}><i className="stop-square" /></button>
           ) : (

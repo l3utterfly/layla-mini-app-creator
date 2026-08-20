@@ -94,6 +94,17 @@ test('provides filesystem operations entirely from memory', () => {
   ])
 })
 
+test('stores imported image data with its MIME type and binary size', () => {
+  const workspace = new VirtualWorkspace()
+  const image = workspace.writeFile('icon.png', 'data:image/png;base64,AQIDBA==', {
+    mimeType: 'image/png',
+  })
+
+  assert.equal(image.mimeType, 'image/png')
+  assert.equal(image.size, 4)
+  assert.equal(workspace.readFile('icon.png').content, 'data:image/png;base64,AQIDBA==')
+})
+
 test('searches with regular expressions by default and supports explicit literal matching', () => {
   const workspace = new VirtualWorkspace([{
     name: 'api.md',

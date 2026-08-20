@@ -27,6 +27,7 @@ export type FileReadOptions = {
 
 export type FileWriteOptions = {
   expectedRevision?: string
+  mimeType?: string
 }
 
 export type FileSearchOptions = {
@@ -72,9 +73,12 @@ export class VirtualWorkspaceError extends Error {
 }
 
 const mimeTypes: Record<string, string> = {
+  avif: 'image/avif',
+  bmp: 'image/bmp',
   css: 'text/css',
   gif: 'image/gif',
   html: 'text/html',
+  ico: 'image/x-icon',
   jpeg: 'image/jpeg',
   jpg: 'image/jpeg',
   js: 'text/javascript',
@@ -109,6 +113,21 @@ function detectMimeType(path: string) {
 }
 
 function byteLength(content: string) {
+  const dataUrl = /^data:[^,]*?(;base64)?,([\s\S]*)$/.exec(content)
+  if (dataUrl) {
+    const payload = dataUrl[2] ?? ''
+    if (dataUrl[1]) {
+      const compactPayload = payload.replace(/\s/g, '')
+      const padding = compactPayload.endsWith('==') ? 2 : compactPayload.endsWith('=') ? 1 : 0
+      return Math.max(0, Math.floor(compactPayload.length * 3 / 4) - padding)
+    }
+
+    try {
+      return new TextEncoder().encode(decodeURIComponent(payload)).byteLength
+    } catch {
+      // Fall back to measuring the stored representation when a data URL is malformed.
+    }
+  }
   return new TextEncoder().encode(content).byteLength
 }
 
@@ -270,7 +289,7 @@ export class VirtualWorkspace {
     }
 
     const nextRevision = this.#revision + 1
-    this.#files.set(normalizedPath, this.#makeFile(normalizedPath, content, undefined, nextRevision))
+    this.#files.set(normalizedPath, this.#makeFile(normalizedPath, content, options.mimeType, nextRevision))
     this.#commit(nextRevision, [normalizedPath])
     return cloneFile(this.#files.get(normalizedPath)!)
   }
