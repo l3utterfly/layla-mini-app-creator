@@ -4,6 +4,7 @@ type ListFilesArguments = { path?: string }
 type ReadFileArguments = { path: string; startLine?: number; endLine?: number }
 type SearchFilesArguments = { query: string; path?: string; isRegex?: boolean }
 type WriteFileArguments = { path: string; content: string; expectedRevision?: string }
+type ApplyPatchArguments = { patch: string }
 type EditFileArguments = {
   path: string
   expectedRevision: string
@@ -15,6 +16,7 @@ type ReadSkillReferenceArguments = { reference: string }
 
 type FilesResult = { paths: string[] }
 type FileResult = { path: string; revision: string; content?: string; changeSummary?: string }
+type ApplyPatchResult = { paths: string[]; changeSummary: string }
 type SearchResult = { matches: Array<{ path: string; line: number; text: string }> }
 type PreviewResult = { issueCount: number; status: 'loaded' | 'error' }
 type SkillReferenceResult = { reference: string; content: string }
@@ -59,6 +61,17 @@ export const toolDefinitions = [
     effect: 'write', concurrency: 'serial', resultBudget: 2_000,
     handler: bridgedHandler('write_file'),
     present: args => ({ title: `Wrote ${args.path}`, details: [{ label: args.path }] }),
+  }),
+  defineTool<'apply_patch', ApplyPatchArguments, ApplyPatchResult>({
+    name: 'apply_patch',
+    description: 'Apply one atomic Codex-style patch across one or more workspace files.',
+    inputSchema: { type: 'object', properties: { patch: { type: 'string' } }, required: ['patch'], additionalProperties: false },
+    effect: 'write', concurrency: 'serial', resultBudget: 2_000,
+    handler: bridgedHandler('apply_patch'),
+    present: (_args, result) => ({
+      title: 'Applied patch',
+      details: result?.data?.paths.map(path => ({ label: path })),
+    }),
   }),
   defineTool<'edit_file', EditFileArguments, FileResult>({
     name: 'edit_file',

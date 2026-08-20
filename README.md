@@ -293,12 +293,12 @@ The registry materializes the exact tool catalog for a run. The runtime executes
 | `read_file` | read | Full file or line range; returns revision with content |
 | `search_files` | read | Exact text/regex search with bounded matching lines |
 | `write_file` | write | Create or intentionally replace a file; requires expected revision when replacing |
-| `edit_file` | write | Atomic exact-text replacements against an expected revision |
+| `apply_patch` | write | Atomic Codex-style add, update, and delete operations across one or more files |
 | `delete_file` | write | Delete one explicit path; snapshot first |
 | `preview_check` | diagnostic | Latest load, console, runtime, and unresolved-asset errors |
 | `read_skill_reference` | read | Load one allow-listed reference from the bundled skill |
 
-`edit_file` is the default incremental editing protocol because its exact replacements are easy to validate across model families. A future model profile may substitute an `apply_patch` tool. Overlapping incremental edit tools should not be exposed in the same run; the prompt and parser should teach one editing dialect at a time.
+`write_file` is the raw whole-file path for new files and intentional rewrites. `apply_patch` is the incremental path and accepts the same `*** Begin Patch` / `*** End Patch` family of patches used by Codex. The active prompt teaches only these two mutation dialects so models do not have to choose among overlapping edit tools.
 
 Workspace create/delete/switch, import/export, and Undo are user commands, not agent tools.
 
@@ -359,24 +359,35 @@ The agent loop is protocol-neutral. A `LlmTransport` capability flag selects one
 
 When the host interface supports OpenAI `tools`, assistant `tool_calls`, and `tool` role results, the registry's JSON Schemas are passed natively. The adapter accumulates streamed argument deltas, validates the completed call, and maps structured results back to matching `tool_call_id` values.
 
-### Text-envelope mode
+### Application-owned freeform tool mode
 
-The currently documented `@layla-network/sdk` chat-completions surface exposes OpenAI-shaped messages, streaming content/reasoning, model selection, and abort, but it does not document native `tools` or `tool_calls`. Until native support is verified, the first implementation must work through a strict text envelope.
+The Layla SDK exposes streamed assistant content and separates thinking content into the reasoning stream. The application implements native-style tool semantics over that visible text: it recognizes a complete call, assigns a canonical call ID, validates and executes the operation, records structured tool state, and feeds a bounded result into the next model turn. Reasoning deltas are never parsed for calls.
 
-The tool catalog and this grammar are injected into the system prompt:
+The outer envelope selects a tool. Its body is a tool-specific freeform payload, so file content and patches never need JSON string escaping.
 
 ```text
-To use a tool, respond with exactly one envelope and no other text:
-<tool_call>{"name":"read_file","arguments":{"path":"index.html"}}</tool_call>
-
-When no tool is needed, respond normally without a <tool_call> envelope.
+<tool_call name="write_file" path="index.html">
+<!doctype html>
+<title>Mini app</title>
+</tool_call>
 ```
 
-The harness assigns the canonical call ID after parsing. It accepts the exact envelope and, for model tolerance, a single fenced JSON object with the same shape. It does not execute tool-looking text embedded in a normal explanation. Malformed calls receive one compact protocol error and retry; repeated malformed output ends the run.
+```text
+<tool_call name="apply_patch">
+*** Begin Patch
+*** Update File: index.html
+@@
+-<title>Mini app</title>
++<title>Weather cards</title>
+*** End Patch
+</tool_call>
+```
+
+The parser accepts exactly one complete envelope with no surrounding explanation. `write_file` treats everything between its opening and final closing tag as literal content. `apply_patch` treats the body as a literal Codex-style patch and applies all included file operations atomically. The runtime rejects malformed envelopes, invalid paths, stale or ambiguous hunk context, and partial multi-file patches without changing the workspace. Malformed calls receive one compact protocol error and retry; repeated malformed output ends the run.
 
 Synthetic tool results are stored internally as tool parts. The text adapter serializes them into clearly tagged messages supported by the Layla chat surface. If native tool support becomes available, only the transport mapping changes—the registry, controller, persisted tool parts, and UI remain the same.
 
-Reasoning deltas are never parsed for tool calls. Only final assistant content is eligible, preventing hidden reasoning from triggering a mutation.
+Only `finalContent()` is eligible for parsing, preventing hidden reasoning or an incomplete cancelled stream from triggering a mutation.
 
 ## Agent loop
 

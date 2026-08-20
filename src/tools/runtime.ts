@@ -1,4 +1,5 @@
 import { getToolDefinition } from './registry'
+import { applyWorkspacePatch, ApplyPatchError } from './applyPatch'
 import type { JsonObject, ToolCall, ToolResultEnvelope } from './types'
 import type { WorkspaceFile } from '../types/ui'
 
@@ -136,6 +137,19 @@ function executeOperation(
     }
   }
 
+  if (name === 'apply_patch') {
+    const applied = applyWorkspacePatch(workspace.files, String(args.patch), normalizePath, makeWorkspaceFile)
+    return {
+      data: {
+        paths: applied.changedPaths,
+        changeSummary: `Changed ${applied.changedPaths.length} ${applied.changedPaths.length === 1 ? 'file' : 'files'}`,
+      },
+      workspace: { files: applied.files, revision: workspace.revision + 1 },
+      changedPaths: applied.changedPaths,
+      diagnostics: [],
+    }
+  }
+
   if (name === 'edit_file') {
     const path = normalizePath(args.path)
     const file = requireFile(workspace.files, path)
@@ -218,7 +232,7 @@ export async function executeToolCall(call: ToolCall, workspace: WorkspaceSnapsh
         changedPaths: [],
         diagnostics: [],
         error: {
-          code: error instanceof WorkspaceToolError ? error.code : 'TOOL_ERROR',
+          code: error instanceof WorkspaceToolError || error instanceof ApplyPatchError ? error.code : 'TOOL_ERROR',
           message: error instanceof Error ? error.message : 'The tool call failed.',
         },
       },

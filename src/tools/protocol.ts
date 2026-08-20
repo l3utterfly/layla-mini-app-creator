@@ -1,10 +1,25 @@
 import { createToolCallFromUnknown, isKnownToolName } from './registry'
-import type { JsonObject, ToolCall } from './types'
+import {
+  isFreeformToolCallCandidate,
+  parseFreeformToolEnvelope,
+  serializeFreeformToolEnvelope,
+} from './freeformEnvelope'
+import type { ToolCall } from './types'
 
-const envelopePattern = /^<tool_call>(\{[\s\S]*\})<\/tool_call>$/
+export function isToolCallCandidate(content: string) {
+  return isFreeformToolCallCandidate(content)
+}
 
 export function serializeToolCall(call: ToolCall): string {
-  return `<tool_call>${JSON.stringify({ name: call.name, arguments: call.arguments })}</tool_call>`
+  if (call.name === 'write_file') {
+    return serializeFreeformToolEnvelope('write_file', String(call.arguments.content), String(call.arguments.path))
+  }
+
+  if (call.name === 'apply_patch') {
+    return serializeFreeformToolEnvelope('apply_patch', String(call.arguments.patch))
+  }
+
+  throw new Error(`${call.name} does not have a freeform text envelope.`)
 }
 
 export type ParsedToolCall =
@@ -12,21 +27,32 @@ export type ParsedToolCall =
   | { ok: false; error: string }
 
 export function parseToolCall(content: string, callId?: string): ParsedToolCall {
-  const match = content.trim().match(envelopePattern)
-  if (!match?.[1]) return { ok: false, error: 'Response is not an exact tool-call envelope.' }
-
   try {
-    const payload = JSON.parse(match[1]) as { name?: unknown; arguments?: unknown }
-    if (typeof payload.name !== 'string' || !isKnownToolName(payload.name)) {
-      return { ok: false, error: `Unknown tool: ${String(payload.name)}` }
+    const envelope = parseFreeformToolEnvelope(content)
+    if (!envelope) {
+      return { ok: false, error: 'Response is not one exact <tool_call> envelope.' }
     }
-    if (typeof payload.arguments !== 'object' || payload.arguments === null || Array.isArray(payload.arguments)) {
-      return { ok: false, error: 'Tool arguments must be an object.' }
+
+    const { name, path, payload } = envelope
+    if (!isKnownToolName(name)) return { ok: false, error: `Unknown tool: ${name}` }
+
+    if (name === 'write_file') {
+      if (path === undefined) return { ok: false, error: 'write_file requires a path attribute.' }
+      return {
+        ok: true,
+        call: createToolCallFromUnknown(name, { path, content: payload }, callId),
+      }
     }
-    return {
-      ok: true,
-      call: createToolCallFromUnknown(payload.name, payload.arguments as JsonObject, callId),
+
+    if (name === 'apply_patch') {
+      if (path !== undefined) return { ok: false, error: 'apply_patch does not accept a path attribute.' }
+      return {
+        ok: true,
+        call: createToolCallFromUnknown(name, { patch: payload }, callId),
+      }
     }
+
+    return { ok: false, error: `${name} is not available through the freeform text protocol.` }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Malformed tool call.' }
   }
