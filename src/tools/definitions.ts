@@ -46,8 +46,8 @@ export const toolDefinitions = [
   }),
   defineTool<'search_files', SearchFilesArguments, SearchResult>({
     name: 'search_files',
-    description: 'Search workspace text using an exact string or regular expression.',
-    inputSchema: { type: 'object', properties: { query: { type: 'string' }, path: pathProperty, isRegex: { type: 'boolean' } }, required: ['query'], additionalProperties: false },
+    description: 'Search workspace text line by line. The query is a JavaScript regular expression by default; set isRegex to false for exact literal text.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'JavaScript regular expression pattern, or literal text when isRegex is false.' }, path: pathProperty, isRegex: { type: 'boolean', description: 'Defaults to true. Set false to escape regex metacharacters and search literally.' } }, required: ['query'], additionalProperties: false },
     effect: 'read', concurrency: 'parallel', resultBudget: 8_000,
     handler: bridgedHandler('search_files'),
     present: (args, result) => ({ title: `Searched for “${args.query}”`, subtitle: result?.data ? `${result.data.matches.length} matches` : undefined }),

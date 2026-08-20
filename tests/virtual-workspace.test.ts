@@ -94,6 +94,21 @@ test('provides filesystem operations entirely from memory', () => {
   ])
 })
 
+test('searches with regular expressions by default and supports explicit literal matching', () => {
+  const workspace = new VirtualWorkspace([{
+    name: 'api.md',
+    content: '## `layla.characters.list(offset?, range?, options?)`\nLiteral expression: value+next',
+  }])
+
+  assert.deepEqual(workspace.searchFiles('^#.*list').map(match => match.line), [1])
+  assert.deepEqual(workspace.searchFiles('value+next').map(match => match.line), [])
+  assert.deepEqual(workspace.searchFiles('value+next', { isRegex: false }).map(match => match.line), [2])
+  assert.throws(
+    () => workspace.searchFiles('[invalid'),
+    (error: unknown) => error instanceof VirtualWorkspaceError && error.code === 'INVALID_PATTERN',
+  )
+})
+
 test('returns defensive copies and rejects stale writes', () => {
   const workspace = new VirtualWorkspace([{ name: 'index.html', content: 'original' }])
   const snapshot = workspace.snapshot()

@@ -27,6 +27,7 @@ type ChatPaneProps = {
 
 let nextMessageNumber = 1
 const STREAM_RENDER_INTERVAL_MS = 200
+const MAX_TOOL_ITERATIONS = 24
 
 function createMessageId() {
   return `message_${nextMessageNumber++}`
@@ -42,6 +43,27 @@ function serializeToolResult(result: ToolResultEnvelope) {
 
 function serializeToolResults(results: ToolResultEnvelope[]) {
   return results.map(serializeToolResult).join('\n')
+}
+
+function summarizeToolCall(call: ToolCall) {
+  const path = typeof call.arguments.path === 'string' ? call.arguments.path : undefined
+  return {
+    callId: call.callId,
+    name: call.name,
+    argumentKeys: Object.keys(call.arguments),
+    ...(path === undefined ? {} : { path }),
+  }
+}
+
+function summarizeToolResult(result: ToolResultEnvelope) {
+  return {
+    callId: result.callId,
+    name: result.tool,
+    ok: result.ok,
+    workspaceRevision: result.workspaceRevision,
+    changedPaths: result.changedPaths,
+    ...(result.error ? { error: result.error } : {}),
+  }
 }
 
 export function ChatPane({
@@ -99,8 +121,15 @@ export function ChatPane({
     let cancelPendingStreamRender = () => {}
 
     try {
-      for (let iteration = 0; iteration < 8; iteration += 1) {
+      for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         if (cancellationRequested.current) throw new LaylaAbortError('Generation cancelled')
+
+        const workspaceSnapshot = getWorkspaceSnapshot()
+        console.debug('[tool-loop] starting inference iteration', {
+          iteration: iteration + 1,
+          contextMessageCount: contextMessages.current.length,
+          workspaceRevision: workspaceSnapshot.revision,
+        })
 
         const assistantId = createMessageId()
         const assistantMessage: ConversationMessage = {
@@ -145,7 +174,7 @@ export function ChatPane({
           messages: [
             {
               role: 'system',
-              content: buildMiniAppSystemPrompt(workspace, getWorkspaceSnapshot()),
+              content: buildMiniAppSystemPrompt(workspace, workspaceSnapshot),
             },
             ...contextMessages.current,
           ],
@@ -172,8 +201,22 @@ export function ChatPane({
         })
         contextMessages.current.push({ role: 'assistant', content: finalContent })
 
+        const startsWithToolCall = isToolCallCandidate(finalContent)
+        const containsToolCallMarker = finalContent.includes('<tool_call')
+        console.debug('[tool-loop] inspecting assistant output', {
+          iteration: iteration + 1,
+          contentLength: finalContent.length,
+          startsWithToolCall,
+          containsToolCallMarker,
+        })
+
         const parsed = parseToolCalls(finalContent)
         if (parsed.ok) {
+          console.info('[tool-loop] detected tool calls', {
+            iteration: iteration + 1,
+            count: parsed.calls.length,
+            calls: parsed.calls.map(summarizeToolCall),
+          })
           let activities: ToolRunGroup['activities'] = parsed.calls.map((call, index) => ({
             call,
             status: index === 0 ? 'running' : 'pending',
@@ -199,7 +242,31 @@ export function ChatPane({
             }
 
             const call = parsed.calls[callIndex]!
-            const result = await onRunTool(call)
+            console.info('[tool-loop] dispatching tool call', {
+              iteration: iteration + 1,
+              position: callIndex + 1,
+              total: parsed.calls.length,
+              call: summarizeToolCall(call),
+            })
+            let result: ToolResultEnvelope
+            try {
+              result = await onRunTool(call)
+            } catch (error) {
+              console.error('[tool-loop] tool dispatch threw', {
+                iteration: iteration + 1,
+                position: callIndex + 1,
+                total: parsed.calls.length,
+                call: summarizeToolCall(call),
+                error: error instanceof Error ? error.message : String(error),
+              })
+              throw error
+            }
+            console[result.ok ? 'info' : 'warn']('[tool-loop] tool call completed', {
+              iteration: iteration + 1,
+              position: callIndex + 1,
+              total: parsed.calls.length,
+              result: summarizeToolResult(result),
+            })
             results.push(result)
             activities = activities.map((activity, index) => {
               if (index === callIndex) {
@@ -213,10 +280,21 @@ export function ChatPane({
           }
 
           contextMessages.current.push({ role: 'user', content: serializeToolResults(results) })
+          console.debug('[tool-loop] queued tool results and continuing', {
+            iteration: iteration + 1,
+            resultCount: results.length,
+            nextIteration: iteration + 2,
+          })
           continue
         }
 
-        if (finalContent.includes('<tool_call')) {
+        if (containsToolCallMarker) {
+          console.warn('[tool-loop] rejected tool call candidate', {
+            iteration: iteration + 1,
+            startsWithToolCall,
+            error: parsed.error,
+            contentLength: finalContent.length,
+          })
           contextMessages.current.push({
             role: 'user',
             content: `<tool_result>${JSON.stringify({ ok: false, error: { code: 'INVALID_TOOL_CALL', message: parsed.error } })}</tool_result>`,
@@ -224,11 +302,20 @@ export function ChatPane({
           continue
         }
 
+        console.debug('[tool-loop] assistant output contains no tool call; ending loop', {
+          iteration: iteration + 1,
+          contentLength: finalContent.length,
+        })
         onRunStateChange('complete')
         return
       }
 
-      throw new Error('The model reached the maximum of 8 tool iterations without a final response.')
+      console.error('[tool-loop] iteration budget exhausted', {
+        maxIterations: MAX_TOOL_ITERATIONS,
+        contextMessageCount: contextMessages.current.length,
+        workspaceRevision: getWorkspaceSnapshot().revision,
+      })
+      throw new Error(`The model reached the maximum of ${MAX_TOOL_ITERATIONS} tool iterations without a final response.`)
     } catch (error) {
       cancelPendingStreamRender()
       activeStream.current = null
@@ -239,9 +326,24 @@ export function ChatPane({
         onRunStateChange('cancelled')
       } else {
         const message = error instanceof Error ? error.message : 'Unable to reach the inference engine.'
-        onMessagesChange(current => current.map(entry => entry.state === 'streaming'
-          ? { ...entry, state: 'error', error: message, rawOutput: reconstructRawOutput(entry.reasoning, entry.content) }
-          : entry))
+        onMessagesChange(current => {
+          let updatedStreamingMessage = false
+          const updated = current.map(entry => {
+            if (entry.state !== 'streaming') return entry
+            updatedStreamingMessage = true
+            return { ...entry, state: 'error' as const, error: message, rawOutput: reconstructRawOutput(entry.reasoning, entry.content) }
+          })
+          if (updatedStreamingMessage) return updated
+          return [...updated, {
+            id: createMessageId(),
+            role: 'assistant',
+            content: '',
+            reasoning: '',
+            rawOutput: message,
+            state: 'error',
+            error: message,
+          }]
+        })
         onRunStateChange('error')
       }
     }

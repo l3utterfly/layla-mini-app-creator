@@ -21,6 +21,10 @@ function optionalNumber(value: unknown) {
   return typeof value === 'number' ? value : undefined
 }
 
+function optionalBoolean(value: unknown) {
+  return typeof value === 'boolean' ? value : undefined
+}
+
 function executeOperation(
   name: string,
   args: JsonObject,
@@ -50,7 +54,7 @@ function executeOperation(
       data: {
         matches: workspace.searchFiles(String(args.query), {
           path: optionalString(args.path),
-          isRegex: args.isRegex === true,
+          isRegex: optionalBoolean(args.isRegex),
         }),
       },
       ...unchanged,

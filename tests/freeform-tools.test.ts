@@ -55,6 +55,15 @@ test('multiple tool envelopes are parsed in response order', () => {
   assert.equal(parseFreeformToolEnvelope(content), null)
 })
 
+test('tool envelopes accept inline whitespace around JSON payloads', () => {
+  const content = '<tool_call name="read_file"> {"path":".agent/layla-sdk/references/sdk-api.md","startLine":1,"endLine":200} </tool_call>'
+
+  assert.deepEqual(parseFreeformToolEnvelope(content), {
+    name: 'read_file',
+    payload: ' {"path":".agent/layla-sdk/references/sdk-api.md","startLine":1,"endLine":200} ',
+  })
+})
+
 test('apply_patch updates, adds, and deletes files atomically', () => {
   const files = [
     createFile('index.html', '<main>\n  <h1>Old</h1>\n</main>'),
@@ -161,6 +170,18 @@ test('model protocol executes virtual workspace tools end to end', async () => {
     assert.equal(read.result.data?.content, '<h1 data-label="raw">Hello, Layla</h1>')
     const fileRevision = String(read.result.data?.revision)
 
+    const inlineReadCall = parseToolCall(
+      '<tool_call name="read_file"> {"path":".agent/layla-sdk/references/sdk-api.md","startLine":1,"endLine":200} </tool_call>',
+      'call_inline_read',
+    )
+    assert.equal(inlineReadCall.ok, true)
+    if (!inlineReadCall.ok) return
+    assert.deepEqual(inlineReadCall.call.arguments, {
+      path: '.agent/layla-sdk/references/sdk-api.md',
+      startLine: 1,
+      endLine: 200,
+    })
+
     const editCall = parseToolCall(`<tool_call name="edit_file">
 ${JSON.stringify({
   path: 'index.html',
@@ -188,12 +209,21 @@ ${JSON.stringify({
       text: '<h1 data-label="raw">Hello, virtual workspace</h1>',
     }])
 
+    const regexSearchCall = parseToolCall(`<tool_call name="search_files">
+{"query":"^<h1.*virtual workspace"}
+</tool_call>`, 'call_regex_search')
+    assert.equal(regexSearchCall.ok, true)
+    if (!regexSearchCall.ok) return
+    const regexSearched = await executeToolCall(regexSearchCall.call, edited.workspace)
+    assert.equal((regexSearched.result.data?.matches as unknown[])?.length, 1)
+
     const systemPrompt = buildMiniAppSystemPrompt('Test Workspace', searched.workspace)
     assert.match(systemPrompt, /Workspace: "Test Workspace" \(revision 4\)/)
     assert.match(systemPrompt, /"read_file"/)
     assert.match(systemPrompt, /"index\.html" \| text\/html/)
     assert.match(systemPrompt, /one or more complete <tool_call> envelopes/)
     assert.match(systemPrompt, /execute sequentially in the order emitted/)
+    assert.match(systemPrompt, /search_files treats query as a JavaScript regular expression by default/)
     assert.match(systemPrompt, /first action.*read \.agent\/layla-sdk\/SKILL\.md/i)
     assert.match(systemPrompt, /trusted, read-only application guidance/)
     assert.equal(systemPrompt.includes('Hello, virtual workspace'), false)

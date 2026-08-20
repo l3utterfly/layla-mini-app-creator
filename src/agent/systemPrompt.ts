@@ -56,6 +56,7 @@ ${manifest}
 - Produce a complete, usable artifact rather than a stub or a plan.
 - Keep the project compact and offline-friendly. Make the interface responsive and touch-friendly.
 - Inspect relevant existing files before editing them. The manifest contains metadata, not file contents; use read_file or search_files for exact content.
+- search_files treats query as a JavaScript regular expression by default. Pass "isRegex": false only when the query must be matched as literal text.
 - For a straightforward one-file static page in an empty workspace, write a self-contained index.html first.
 - Do not claim a file was changed unless a file action succeeded.
 </mini_app_quality>

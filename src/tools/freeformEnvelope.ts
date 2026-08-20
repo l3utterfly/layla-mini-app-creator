@@ -1,5 +1,5 @@
-const openingEnvelopePattern = /<tool_call name="([a-z][a-z0-9_]*?)"(?: path="([^"\r\n]*)")?>\r?\n/y
-const closingEnvelopePattern = /\r?\n<\/tool_call>/g
+const openingEnvelopePattern = /<tool_call name="([a-z][a-z0-9_]*?)"(?: path="([^"\r\n]*)")?>/y
+const closingEnvelopePattern = /<\/tool_call>/g
 
 function escapeAttribute(value: string) {
   return value
@@ -21,6 +21,19 @@ export type FreeformToolEnvelope = {
   name: string
   path?: string
   payload: string
+}
+
+function removeEnvelopeFramingNewlines(payload: string) {
+  let start = 0
+  let end = payload.length
+
+  if (payload.startsWith('\r\n')) start = 2
+  else if (payload.startsWith('\n')) start = 1
+
+  if (payload.endsWith('\r\n')) end -= 2
+  else if (payload.endsWith('\n')) end -= 1
+
+  return payload.slice(start, Math.max(start, end))
 }
 
 export function isFreeformToolCallCandidate(content: string) {
@@ -51,7 +64,7 @@ export function parseFreeformToolEnvelopes(content: string): FreeformToolEnvelop
     envelopes.push({
       name: opening[1],
       ...(opening[2] === undefined ? {} : { path: decodeAttribute(opening[2]) }),
-      payload: content.slice(payloadStart, closing.index),
+      payload: removeEnvelopeFramingNewlines(content.slice(payloadStart, closing.index)),
     })
 
     cursor = closingEnvelopePattern.lastIndex

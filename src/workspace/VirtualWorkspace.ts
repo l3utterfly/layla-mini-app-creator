@@ -237,9 +237,9 @@ export class VirtualWorkspace {
   searchFiles(query: string, options: FileSearchOptions = {}) {
     let matcher: RegExp
     try {
-      matcher = options.isRegex
-        ? new RegExp(query)
-        : new RegExp(escapeRegularExpression(query))
+      matcher = options.isRegex === false
+        ? new RegExp(escapeRegularExpression(query))
+        : new RegExp(query)
     } catch (error) {
       throw new VirtualWorkspaceError(
         'INVALID_PATTERN',
