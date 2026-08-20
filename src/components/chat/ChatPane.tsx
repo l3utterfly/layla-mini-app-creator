@@ -19,6 +19,7 @@ export function ChatPane({ active, workspace, runState, onRunStateChange }: Chat
   const [composer, setComposer] = useState('')
   const [sentPrompt, setSentPrompt] = useState<string | null>(null)
   const [assistantResponse, setAssistantResponse] = useState('')
+  const [assistantReasoning, setAssistantReasoning] = useState('')
   const [runError, setRunError] = useState<string | null>(null)
   const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
 
@@ -32,6 +33,7 @@ export function ChatPane({ active, workspace, runState, onRunStateChange }: Chat
     if (!prompt || runState === 'thinking') return
     setSentPrompt(prompt)
     setAssistantResponse('')
+    setAssistantReasoning('')
     setRunError(null)
     setComposer('')
     onRunStateChange('thinking')
@@ -47,6 +49,7 @@ export function ChatPane({ active, workspace, runState, onRunStateChange }: Chat
     })
     activeStream.current = stream
     stream.on('content', (_delta, snapshot) => setAssistantResponse(snapshot))
+    stream.on('reasoning', (_delta, snapshot) => setAssistantReasoning(snapshot))
 
     try {
       await stream.finalContent()
@@ -81,15 +84,31 @@ export function ChatPane({ active, workspace, runState, onRunStateChange }: Chat
             <article className="user-message"><p>{sentPrompt}</p></article>
             <AssistantMessage live>
               {runState === 'thinking' ? (
-                assistantResponse
-                  ? <pre className="raw-assistant-output">{assistantResponse}</pre>
+                assistantReasoning || assistantResponse
+                  ? <>
+                      {assistantReasoning && <div className="reasoning-output"><span>Thinking</span><pre>{assistantReasoning}</pre></div>}
+                      {assistantResponse
+                        ? <pre className="raw-assistant-output">{assistantResponse}</pre>
+                        : <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Forming response…</span></div>}
+                    </>
                   : <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Waiting for the model…</span></div>
               ) : runState === 'cancelled' ? (
-                <p className="cancelled-copy">{assistantResponse || 'Stopped. Your workspace is unchanged.'}</p>
+                <>
+                  {assistantReasoning && <div className="reasoning-output"><span>Thinking</span><pre>{assistantReasoning}</pre></div>}
+                  <p className="cancelled-copy">{assistantResponse || 'Stopped. Your workspace is unchanged.'}</p>
+                </>
               ) : runState === 'error' ? (
-                <p className="cancelled-copy">{runError || 'The inference request failed.'}</p>
+                <>
+                  {assistantReasoning && <div className="reasoning-output"><span>Thinking</span><pre>{assistantReasoning}</pre></div>}
+                  {assistantResponse && <pre className="raw-assistant-output">{assistantResponse}</pre>}
+                  <p className="cancelled-copy">{runError || 'The inference request failed.'}</p>
+                </>
               ) : (
-                <><pre className="raw-assistant-output">{assistantResponse}</pre><div className="compact-success"><Icon name="check" size={14} /> Raw response complete</div></>
+                <>
+                  {assistantReasoning && <div className="reasoning-output"><span>Thinking</span><pre>{assistantReasoning}</pre></div>}
+                  <pre className="raw-assistant-output">{assistantResponse}</pre>
+                  <div className="compact-success"><Icon name="check" size={14} /> Response complete</div>
+                </>
               )}
             </AssistantMessage>
           </>
