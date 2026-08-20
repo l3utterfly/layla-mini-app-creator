@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Terminal,
   Undo2,
   Bug,
   X,
@@ -41,6 +42,7 @@ const icons = {
   folder: Folder,
   copy: Copy,
   bug: Bug,
+  terminal: Terminal,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof icons
