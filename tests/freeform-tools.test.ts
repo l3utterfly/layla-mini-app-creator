@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { applyWorkspacePatch, ApplyPatchError } from '../src/tools/applyPatch.ts'
+import { advanceToolFailureBudget, MAX_CONSECUTIVE_TOOL_FAILURES } from '../src/tools/failureBudget.ts'
 import {
   isFreeformToolCallCandidate,
   parseFreeformToolEnvelope,
@@ -62,6 +63,27 @@ test('tool envelopes accept inline whitespace around JSON payloads', () => {
     name: 'read_file',
     payload: ' {"path":".agent/layla-sdk/references/sdk-api.md","startLine":1,"endLine":200} ',
   })
+})
+
+test('only consecutive failed tool calls consume the failure budget', () => {
+  let consecutiveFailures = 0
+  for (let index = 0; index < MAX_CONSECUTIVE_TOOL_FAILURES - 1; index += 1) {
+    const budget = advanceToolFailureBudget(consecutiveFailures, false)
+    consecutiveFailures = budget.consecutiveFailures
+    assert.equal(budget.exhausted, false)
+  }
+
+  const reset = advanceToolFailureBudget(consecutiveFailures, true)
+  assert.deepEqual(reset, { consecutiveFailures: 0, exhausted: false })
+
+  consecutiveFailures = 0
+  let exhausted = false
+  for (let index = 0; index < MAX_CONSECUTIVE_TOOL_FAILURES; index += 1) {
+    const budget = advanceToolFailureBudget(consecutiveFailures, false)
+    consecutiveFailures = budget.consecutiveFailures
+    exhausted = budget.exhausted
+  }
+  assert.equal(exhausted, true)
 })
 
 test('apply_patch updates, adds, and deletes files atomically', () => {

@@ -3,6 +3,7 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { LaylaAbortError, type ChatCompletionMessageParam } from '@layla-network/sdk'
 import { buildMiniAppSystemPrompt } from '../../agent/systemPrompt'
 import { layla } from '../../lib/layla'
+import { advanceToolFailureBudget, MAX_CONSECUTIVE_TOOL_FAILURES } from '../../tools/failureBudget'
 import { isToolCallCandidate, parseToolCalls } from '../../tools/protocol'
 import type { ToolCall, ToolResultEnvelope, ToolRunGroup } from '../../tools/types'
 import type { ConversationMessage, RunState } from '../../types/ui'
@@ -27,7 +28,6 @@ type ChatPaneProps = {
 
 let nextMessageNumber = 1
 const STREAM_RENDER_INTERVAL_MS = 200
-const MAX_TOOL_ITERATIONS = 24
 
 function createMessageId() {
   return `message_${nextMessageNumber++}`
@@ -119,9 +119,10 @@ export function ChatPane({
     onRunStateChange('thinking')
 
     let cancelPendingStreamRender = () => {}
+    let consecutiveToolFailures = 0
 
     try {
-      for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+      for (let iteration = 0; ; iteration += 1) {
         if (cancellationRequested.current) throw new LaylaAbortError('Generation cancelled')
 
         const workspaceSnapshot = getWorkspaceSnapshot()
@@ -129,6 +130,7 @@ export function ChatPane({
           iteration: iteration + 1,
           contextMessageCount: contextMessages.current.length,
           workspaceRevision: workspaceSnapshot.revision,
+          consecutiveToolFailures,
         })
 
         const assistantId = createMessageId()
@@ -268,15 +270,35 @@ export function ChatPane({
               result: summarizeToolResult(result),
             })
             results.push(result)
+            const failureBudget = advanceToolFailureBudget(consecutiveToolFailures, result.ok)
+            consecutiveToolFailures = failureBudget.consecutiveFailures
             activities = activities.map((activity, index) => {
               if (index === callIndex) {
                 return { call, status: result.ok ? 'completed' : 'error', result }
+              }
+              if (failureBudget.exhausted && index > callIndex) {
+                return { ...activity, status: 'cancelled' }
               }
               return index === callIndex + 1 ? { ...activity, status: 'running' } : activity
             })
             updateAssistant(assistantId, {
               toolRun: { ...runningTool, activities },
             })
+            console.debug('[tool-loop] updated consecutive failure budget', {
+              callId: call.callId,
+              succeeded: result.ok,
+              consecutiveToolFailures,
+              maxConsecutiveToolFailures: MAX_CONSECUTIVE_TOOL_FAILURES,
+            })
+            if (failureBudget.exhausted) {
+              console.error('[tool-loop] consecutive tool failure budget exhausted', {
+                iteration: iteration + 1,
+                call: summarizeToolCall(call),
+                consecutiveToolFailures,
+                maxConsecutiveToolFailures: MAX_CONSECUTIVE_TOOL_FAILURES,
+              })
+              throw new Error(`The model made ${MAX_CONSECUTIVE_TOOL_FAILURES} consecutive failed tool calls.`)
+            }
           }
 
           contextMessages.current.push({ role: 'user', content: serializeToolResults(results) })
@@ -289,12 +311,24 @@ export function ChatPane({
         }
 
         if (containsToolCallMarker) {
+          const failureBudget = advanceToolFailureBudget(consecutiveToolFailures, false)
+          consecutiveToolFailures = failureBudget.consecutiveFailures
           console.warn('[tool-loop] rejected tool call candidate', {
             iteration: iteration + 1,
             startsWithToolCall,
             error: parsed.error,
             contentLength: finalContent.length,
+            consecutiveToolFailures,
+            maxConsecutiveToolFailures: MAX_CONSECUTIVE_TOOL_FAILURES,
           })
+          if (failureBudget.exhausted) {
+            console.error('[tool-loop] consecutive tool failure budget exhausted', {
+              iteration: iteration + 1,
+              consecutiveToolFailures,
+              maxConsecutiveToolFailures: MAX_CONSECUTIVE_TOOL_FAILURES,
+            })
+            throw new Error(`The model made ${MAX_CONSECUTIVE_TOOL_FAILURES} consecutive failed tool calls.`)
+          }
           contextMessages.current.push({
             role: 'user',
             content: `<tool_result>${JSON.stringify({ ok: false, error: { code: 'INVALID_TOOL_CALL', message: parsed.error } })}</tool_result>`,
@@ -309,13 +343,6 @@ export function ChatPane({
         onRunStateChange('complete')
         return
       }
-
-      console.error('[tool-loop] iteration budget exhausted', {
-        maxIterations: MAX_TOOL_ITERATIONS,
-        contextMessageCount: contextMessages.current.length,
-        workspaceRevision: getWorkspaceSnapshot().revision,
-      })
-      throw new Error(`The model reached the maximum of ${MAX_TOOL_ITERATIONS} tool iterations without a final response.`)
     } catch (error) {
       cancelPendingStreamRender()
       activeStream.current = null
