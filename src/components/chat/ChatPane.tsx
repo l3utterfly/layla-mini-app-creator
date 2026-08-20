@@ -26,6 +26,7 @@ type ChatPaneProps = {
 }
 
 let nextMessageNumber = 1
+const STREAM_RENDER_INTERVAL_MS = 200
 
 function createMessageId() {
   return `message_${nextMessageNumber++}`
@@ -58,6 +59,7 @@ export function ChatPane({
   const contextMessages = useRef<ChatCompletionMessageParam[]>([])
   const cancellationRequested = useRef(false)
   const conversation = useRef<HTMLDivElement>(null)
+  const shouldAutoScroll = useRef(true)
 
   useEffect(() => () => {
     activeStream.current?.abort()
@@ -66,7 +68,7 @@ export function ChatPane({
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const element = conversation.current
-      if (element) element.scrollTop = element.scrollHeight
+      if (element && shouldAutoScroll.current) element.scrollTop = element.scrollHeight
     })
     return () => cancelAnimationFrame(frame)
   }, [messages])
@@ -94,6 +96,8 @@ export function ChatPane({
     setComposer('')
     onRunStateChange('thinking')
 
+    let cancelPendingStreamRender = () => {}
+
     try {
       for (let iteration = 0; iteration < 8; iteration += 1) {
         if (cancellationRequested.current) throw new LaylaAbortError('Generation cancelled')
@@ -111,6 +115,32 @@ export function ChatPane({
 
         let contentSnapshot = ''
         let reasoningSnapshot = ''
+        let renderTimer: ReturnType<typeof setTimeout> | null = null
+        let lastRenderTime = performance.now() - STREAM_RENDER_INTERVAL_MS
+
+        const renderStreamSnapshot = () => {
+          renderTimer = null
+          lastRenderTime = performance.now()
+          updateAssistant(assistantId, {
+            content: contentSnapshot,
+            reasoning: reasoningSnapshot,
+            rawOutput: reconstructRawOutput(reasoningSnapshot, contentSnapshot),
+          })
+        }
+        const scheduleStreamRender = () => {
+          if (renderTimer) return
+          const delay = Math.max(0, STREAM_RENDER_INTERVAL_MS - (performance.now() - lastRenderTime))
+          if (delay === 0) {
+            renderStreamSnapshot()
+          } else {
+            renderTimer = setTimeout(renderStreamSnapshot, delay)
+          }
+        }
+        cancelPendingStreamRender = () => {
+          if (renderTimer) clearTimeout(renderTimer)
+          renderTimer = null
+        }
+
         const stream = layla.chat.completions.stream({
           messages: [
             {
@@ -123,20 +153,15 @@ export function ChatPane({
         activeStream.current = stream
         stream.on('content', (_delta, snapshot) => {
           contentSnapshot = snapshot
-          updateAssistant(assistantId, {
-            content: snapshot,
-            rawOutput: reconstructRawOutput(reasoningSnapshot, snapshot),
-          })
+          scheduleStreamRender()
         })
         stream.on('reasoning', (_delta, snapshot) => {
           reasoningSnapshot = snapshot
-          updateAssistant(assistantId, {
-            reasoning: snapshot,
-            rawOutput: reconstructRawOutput(snapshot, contentSnapshot),
-          })
+          scheduleStreamRender()
         })
 
         const finalContent = await stream.finalContent()
+        cancelPendingStreamRender()
         contentSnapshot = finalContent
         activeStream.current = null
         updateAssistant(assistantId, {
@@ -205,6 +230,7 @@ export function ChatPane({
 
       throw new Error('The model reached the maximum of 8 tool iterations without a final response.')
     } catch (error) {
+      cancelPendingStreamRender()
       activeStream.current = null
       if (error instanceof LaylaAbortError || cancellationRequested.current) {
         onMessagesChange(current => current.map(message => message.state === 'streaming'
@@ -233,7 +259,14 @@ export function ChatPane({
         <span className="ready-badge"><i /> Ready</span>
       </div>
 
-      <div className="conversation" ref={conversation}>
+      <div
+        className="conversation"
+        ref={conversation}
+        onScroll={event => {
+          const element = event.currentTarget
+          shouldAutoScroll.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 2
+        }}
+      >
         {messages.length > 0 && <div className="date-label">Today</div>}
         {messages.map(message => message.role === 'user' ? (
           <article className="user-message" key={message.id}><p>{message.content}</p></article>
