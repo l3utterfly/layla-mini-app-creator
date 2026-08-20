@@ -14,7 +14,7 @@ import type { ConversationMessage, RunState, Tab } from './types/ui'
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
-  const [workspace, setWorkspace] = useState('Quiet Weather')
+  const workspace = 'New workspace'
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [virtualWorkspace] = useState(() => createVirtualWorkspace(scaffoldWorkspaceFiles))
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
@@ -29,11 +29,6 @@ function App() {
 
   const selectTab = (tab: Tab) => {
     setActiveTab(tab)
-    setWorkspaceMenuOpen(false)
-  }
-
-  const selectWorkspace = (name: string) => {
-    setWorkspace(name)
     setWorkspaceMenuOpen(false)
   }
 
@@ -57,7 +52,6 @@ function App() {
         workspace={workspace}
         workspaceMenuOpen={workspaceMenuOpen}
         onToggleWorkspaceMenu={() => setWorkspaceMenuOpen(value => !value)}
-        onSelectWorkspace={selectWorkspace}
         onToggleFiles={() => selectTab(activeTab === 'files' ? 'chat' : 'files')}
         onOpenDebug={() => setDebugOpen(true)}
         debugCount={messages.filter(message => message.role === 'assistant' && message.rawOutput).length}

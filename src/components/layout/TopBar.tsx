@@ -1,4 +1,3 @@
-import { workspaceOptions } from '../../data/mockWorkspace'
 import type { Tab } from '../../types/ui'
 import { Icon } from '../common/Icon'
 
@@ -7,7 +6,6 @@ type TopBarProps = {
   workspace: string
   workspaceMenuOpen: boolean
   onToggleWorkspaceMenu: () => void
-  onSelectWorkspace: (workspace: string) => void
   onToggleFiles: () => void
   onOpenDebug: () => void
   debugCount: number
@@ -18,7 +16,6 @@ export function TopBar({
   workspace,
   workspaceMenuOpen,
   onToggleWorkspaceMenu,
-  onSelectWorkspace,
   onToggleFiles,
   onOpenDebug,
   debugCount,
@@ -45,14 +42,11 @@ export function TopBar({
       {workspaceMenuOpen && (
         <div className="workspace-menu">
           <p>Your workspaces</p>
-          {workspaceOptions.map(option => (
-            <button key={option.name} className={option.name === workspace ? 'active' : ''} onClick={() => onSelectWorkspace(option.name)}>
-              <span className={`workspace-icon ${option.colorClass}`}>{option.name[0]}</span>
-              <span><strong>{option.name}</strong><small>{option.edited}</small></span>
-              {option.name === workspace && <Icon name="check" size={16} />}
-            </button>
-          ))}
-          <button className="new-workspace"><Icon name="plus" size={16} /> New workspace</button>
+          <button className="active" onClick={onToggleWorkspaceMenu}>
+            <span className="workspace-icon">{workspace[0]}</span>
+            <span><strong>{workspace}</strong><small>Edited just now</small></span>
+            <Icon name="check" size={16} />
+          </button>
         </div>
       )}
     </header>
