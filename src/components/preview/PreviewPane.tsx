@@ -4,16 +4,17 @@ import { Icon } from '../common/Icon'
 type PreviewPaneProps = {
   active: boolean
   indexHtml: string
+  refreshToken: number
   workspace: string
 }
 
-export function PreviewPane({ active, indexHtml, workspace }: PreviewPaneProps) {
+export function PreviewPane({ active, indexHtml, refreshToken, workspace }: PreviewPaneProps) {
   const [previewKey, setPreviewKey] = useState(0)
   const [fullPreview, setFullPreview] = useState(false)
 
   const preview = (
     <iframe
-      key={previewKey}
+      key={`${refreshToken}-${previewKey}`}
       className="preview-iframe"
       srcDoc={indexHtml}
       title={`${workspace} preview`}

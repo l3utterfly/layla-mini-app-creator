@@ -20,6 +20,7 @@ function App() {
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
 
   useEffect(
     () => virtualWorkspace.subscribe(snapshot => setFiles(snapshot.files)),
@@ -39,6 +40,13 @@ function App() {
   const runTool = async (call: ToolCall): Promise<ToolResultEnvelope> => {
     const execution = await executeToolCall(call, virtualWorkspace)
     return execution.result
+  }
+
+  const updateRunState = (state: RunState) => {
+    setRunState(state)
+    if (state === 'complete' || state === 'cancelled' || state === 'error') {
+      setPreviewRefreshToken(value => value + 1)
+    }
   }
 
   return (
@@ -62,13 +70,14 @@ function App() {
           runState={runState}
           messages={messages}
           onMessagesChange={setMessages}
-          onRunStateChange={setRunState}
+          onRunStateChange={updateRunState}
           onRunTool={runTool}
           getWorkspaceSnapshot={() => virtualWorkspace.snapshot()}
         />
         <PreviewPane
           active={activeTab === 'preview'}
           indexHtml={files.find(file => file.name === 'index.html')?.content ?? ''}
+          refreshToken={previewRefreshToken}
           workspace={workspace}
         />
         <FilesPane active={activeTab === 'files'} files={files} />
