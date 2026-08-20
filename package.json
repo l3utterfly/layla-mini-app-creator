@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-strip-types --test tests/freeform-tools.test.ts tests/preview-bridge.test.ts tests/virtual-workspace.test.ts",
+    "test": "node --experimental-strip-types --test tests/freeform-tools.test.ts tests/preview-bridge.test.ts tests/virtual-workspace.test.ts tests/workspace-export.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
     "@layla-network/sdk": "^7.3.3",
+    "fflate": "^0.8.3",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

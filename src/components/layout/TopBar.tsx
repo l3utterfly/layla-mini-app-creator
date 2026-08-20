@@ -35,12 +35,15 @@ export function TopBar({
         <button className="icon-button desktop-files-button" aria-label={activeTab === 'files' ? 'Close files' : 'Open files'} onClick={onToggleFiles}>
           <Icon name="folder" />
         </button>
-        <button className="icon-button" aria-label="Create workspace" onClick={onToggleWorkspaceMenu}><Icon name="plus" /></button>
         <button className="icon-button" aria-label="More workspace options"><Icon name="more" /></button>
       </div>
 
       {workspaceMenuOpen && (
         <div className="workspace-menu">
+          <button type="button">
+            <span className="workspace-icon"><Icon name="plus" size={16} /></span>
+            <span><strong>New workspace</strong></span>
+          </button>
           <p>Your workspaces</p>
           <button className="active" onClick={onToggleWorkspaceMenu}>
             <span className="workspace-icon">{workspace[0]}</span>

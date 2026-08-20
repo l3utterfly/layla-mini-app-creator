@@ -7,6 +7,8 @@ import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
 import { executeToolCall } from './tools/runtime'
 import { createVirtualWorkspace } from './workspace'
+import { layla } from './lib/layla'
+import { saveWorkspaceZip } from './workspace/exportWorkspace'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
 import type { ConversationMessage, RunState, Tab } from './types/ui'
 import type { VirtualWorkspaceFileInput } from './workspace'
@@ -124,6 +126,10 @@ function App({ initialWorkspaceFiles }: AppProps) {
     return path
   }
 
+  const exportWorkspace = async () => {
+    return saveWorkspaceZip(virtualWorkspace.snapshot().files, layla.utils)
+  }
+
   return (
     <div className="app-shell">
       <div className="ambient" aria-hidden="true"><span /><span /><span /></div>
@@ -154,7 +160,12 @@ function App({ initialWorkspaceFiles }: AppProps) {
           refreshToken={previewRefreshToken}
           workspace={workspace}
         />
-        <FilesPane active={activeTab === 'files'} files={files} onImportImage={importImage} />
+        <FilesPane
+          active={activeTab === 'files'}
+          files={files}
+          onImportImage={importImage}
+          onExport={exportWorkspace}
+        />
       </main>
 
       <MobileNav activeTab={activeTab} runState={runState} onSelect={selectTab} />
