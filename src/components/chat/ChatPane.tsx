@@ -397,7 +397,14 @@ export function ChatPane({
           shouldAutoScroll.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 2
         }}
       >
-        {messages.length > 0 && <div className="date-label">Today</div>}
+        {messages.length === 0 ? (
+          <div className="conversation-welcome">
+            <span className="eyebrow">Build with Layla</span>
+            <h2>What should we build today?</h2>
+          </div>
+        ) : (
+          <div className="date-label">Today</div>
+        )}
         {messages.map(message => message.role === 'user' ? (
           <article className="user-message" key={message.id}><p>{message.content}</p></article>
         ) : (
