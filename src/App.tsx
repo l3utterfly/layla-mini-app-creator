@@ -8,7 +8,7 @@ import type { RunState, Tab } from './types/ui'
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
-  const [runState, setRunState] = useState<RunState>('complete')
+  const [runState, setRunState] = useState<RunState>('ready')
   const [workspace, setWorkspace] = useState('Quiet Weather')
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
 
@@ -35,7 +35,7 @@ function App() {
       />
 
       <main className="workspace-layout">
-        <ChatPane active={activeTab === 'chat'} runState={runState} onRunStateChange={setRunState} onShowPreview={() => selectTab('preview')} />
+        <ChatPane active={activeTab === 'chat'} runState={runState} onRunStateChange={setRunState} />
         <PreviewPane active={activeTab === 'preview'} workspace={workspace} />
         <FilesPane active={activeTab === 'files'} />
       </main>

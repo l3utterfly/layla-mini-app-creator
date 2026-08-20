@@ -1,6 +1,6 @@
 export type Tab = 'chat' | 'preview' | 'files'
 
-export type RunState = 'ready' | 'thinking' | 'complete' | 'cancelled'
+export type RunState = 'ready' | 'thinking' | 'complete' | 'cancelled' | 'error'
 
 export type WorkspaceOption = {
   name: string

@@ -57,6 +57,16 @@ Model responses should normally be streamed. The UI must expose Stop, retain a c
 
 The creator's own distributable artifact must follow Layla packaging rules. A packaged mini-app has `app.json` and `index.html` at the archive root, with any referenced assets beside them rather than under an extra parent directory.
 
+### Local inference development
+
+Browser development installs the `@layla-network/sdk` mock before creating the shared SDK client. The mock forwards chat completions through Vite's `/llama` proxy to a local OpenAI-compatible `llama-server`.
+
+1. Start `llama-server` on port 8080 (or copy `.env.example` to `.env.local` and change `LLAMA_SERVER_URL`).
+2. If the server runs in router mode, set `VITE_LLAMA_MODEL` to the loaded model ID or its `--alias` value.
+3. Run `npm run dev` and send a chat message.
+
+Production builds do not install the mock; the same `LaylaSDK` client uses the Layla WebView bridge instead.
+
 ## System overview
 
 ```text

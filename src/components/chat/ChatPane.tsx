@@ -1,43 +1,68 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { demoToolRun } from '../../data/mockToolRun'
+import { LaylaAbortError } from '@layla-network/sdk'
+import { layla } from '../../lib/layla'
 import type { RunState } from '../../types/ui'
 import { AssistantMessage } from './AssistantMessage'
 import { Composer } from './Composer'
-import { ToolCallCard } from './ToolCallCard'
 import { Icon } from '../common/Icon'
 
 type ChatPaneProps = {
   active: boolean
   runState: RunState
   onRunStateChange: (state: RunState) => void
-  onShowPreview: () => void
 }
 
-export function ChatPane({ active, runState, onRunStateChange, onShowPreview }: ChatPaneProps) {
+export function ChatPane({ active, runState, onRunStateChange }: ChatPaneProps) {
   const [composer, setComposer] = useState('')
   const [sentPrompt, setSentPrompt] = useState<string | null>(null)
-  const [undone, setUndone] = useState(false)
-  const timer = useRef<number | null>(null)
+  const [assistantResponse, setAssistantResponse] = useState('')
+  const [runError, setRunError] = useState<string | null>(null)
+  const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
 
   useEffect(() => () => {
-    if (timer.current) window.clearTimeout(timer.current)
+    activeStream.current?.abort()
   }, [])
 
-  const sendPrompt = (event: FormEvent) => {
+  const sendPrompt = async (event: FormEvent) => {
     event.preventDefault()
     const prompt = composer.trim()
     if (!prompt || runState === 'thinking') return
     setSentPrompt(prompt)
+    setAssistantResponse('')
+    setRunError(null)
     setComposer('')
-    setUndone(false)
     onRunStateChange('thinking')
-    timer.current = window.setTimeout(() => onRunStateChange('complete'), 5_000)
+
+    const stream = layla.chat.completions.stream({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are Layla, a concise coding assistant helping build a small Layla mini-app.',
+        },
+        { role: 'user', content: prompt },
+      ],
+    })
+    activeStream.current = stream
+    stream.on('content', (_delta, snapshot) => setAssistantResponse(snapshot))
+
+    try {
+      await stream.finalContent()
+      onRunStateChange('complete')
+    } catch (error) {
+      if (error instanceof LaylaAbortError) {
+        onRunStateChange('cancelled')
+      } else {
+        setRunError(error instanceof Error ? error.message : 'Unable to reach the inference engine.')
+        onRunStateChange('error')
+      }
+    } finally {
+      if (activeStream.current === stream) activeStream.current = null
+    }
   }
 
   const stopRun = () => {
-    if (timer.current) window.clearTimeout(timer.current)
-    onRunStateChange('cancelled')
+    activeStream.current?.abort()
   }
 
   return (
@@ -48,29 +73,21 @@ export function ChatPane({ active, runState, onRunStateChange, onShowPreview }: 
       </div>
 
       <div className="conversation">
-        <div className="date-label">Today</div>
-        <AssistantMessage>
-          <p>I’ve opened <strong>Quiet Weather</strong>. It’s a small offline mini-app with four files.</p>
-          <p>What would you like to make?</p>
-        </AssistantMessage>
-
-        <article className="user-message"><p>Make the weather card feel calm and cinematic. Add an hourly forecast and make sure it works well on a phone.</p></article>
-
-        <AssistantMessage>
-          <p>I gave the card a quieter rainy atmosphere, added the next four hours, and tightened the layout for smaller screens.</p>
-          <ToolCallCard run={demoToolRun} undone={undone} onUndo={() => setUndone(true)} onShowPreview={onShowPreview} />
-        </AssistantMessage>
-
         {sentPrompt && (
           <>
+            <div className="date-label">Today</div>
             <article className="user-message"><p>{sentPrompt}</p></article>
             <AssistantMessage live>
               {runState === 'thinking' ? (
-                <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Checking the workspace…</span></div>
+                assistantResponse
+                  ? <p>{assistantResponse}</p>
+                  : <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Waiting for the model…</span></div>
               ) : runState === 'cancelled' ? (
-                <p className="cancelled-copy">Stopped. Your workspace is unchanged.</p>
+                <p className="cancelled-copy">{assistantResponse || 'Stopped. Your workspace is unchanged.'}</p>
+              ) : runState === 'error' ? (
+                <p className="cancelled-copy">{runError || 'The inference request failed.'}</p>
               ) : (
-                <><p>Done — I refined that in the prototype and checked the mobile preview.</p><div className="compact-success"><Icon name="check" size={14} /> Preview checked · No issues</div></>
+                <><p>{assistantResponse}</p><div className="compact-success"><Icon name="check" size={14} /> Response complete</div></>
               )}
             </AssistantMessage>
           </>
