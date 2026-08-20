@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import { useLayoutEffect } from 'react'
+import type { FormEvent, KeyboardEvent, RefObject } from 'react'
 import type { RunState } from '../../types/ui'
 import { Icon } from '../common/Icon'
 
@@ -9,14 +9,14 @@ type ComposerProps = {
   onChange: (value: string) => void
   onSubmit: (event: FormEvent) => void
   onStop: () => void
+  textareaRef: RefObject<HTMLTextAreaElement | null>
 }
 
-export function Composer({ value, runState, onChange, onSubmit, onStop }: ComposerProps) {
+export function Composer({ value, runState, onChange, onSubmit, onStop, textareaRef }: ComposerProps) {
   const isWorking = runState === 'thinking'
-  const textarea = useRef<HTMLTextAreaElement>(null)
 
   useLayoutEffect(() => {
-    const element = textarea.current
+    const element = textareaRef.current
     if (!element) return
 
     element.style.height = 'auto'
@@ -41,7 +41,7 @@ export function Composer({ value, runState, onChange, onSubmit, onStop }: Compos
             <span>Layla is working</span>
           </div>
         ) : (
-          <textarea ref={textarea} value={value} onChange={event => onChange(event.target.value)} placeholder="Ask Layla to build something…" rows={1} aria-label="Message Layla" onKeyDown={submitOnEnter} />
+          <textarea ref={textareaRef} value={value} onChange={event => onChange(event.target.value)} placeholder="Ask Layla to build something…" rows={1} aria-label="Message Layla" onKeyDown={submitOnEnter} />
         )}
         <div className="composer-actions">
           {/* Attachment support will be added in a future release.

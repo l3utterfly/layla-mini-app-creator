@@ -13,7 +13,7 @@ import { Composer } from './Composer'
 import { MarkdownContent } from './MarkdownContent'
 import { ToolCallCard } from './ToolCallCard'
 import { ToolCallDisclosure } from './ToolCallDisclosure'
-import { Icon } from '../common/Icon'
+import { Icon, type IconName } from '../common/Icon'
 
 type ChatPaneProps = {
   active: boolean
@@ -28,6 +28,12 @@ type ChatPaneProps = {
 
 let nextMessageNumber = 1
 const STREAM_RENDER_INTERVAL_MS = 200
+
+const EXAMPLE_PROMPTS: { icon: IconName; prompt: string }[] = [
+  { icon: 'list', prompt: 'build a shopping list mini-app' },
+  { icon: 'users', prompt: 'build a mini-app which lists all my characters' },
+  { icon: 'gamepad', prompt: 'build a pong game' },
+]
 
 function createMessageId() {
   return `message_${nextMessageNumber++}`
@@ -77,6 +83,7 @@ export function ChatPane({
   getWorkspaceSnapshot,
 }: ChatPaneProps) {
   const [composer, setComposer] = useState('')
+  const composerTextarea = useRef<HTMLTextAreaElement>(null)
   const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
   const contextMessages = useRef<ChatCompletionMessageParam[]>([])
   const cancellationRequested = useRef(false)
@@ -97,6 +104,16 @@ export function ChatPane({
 
   const updateAssistant = (id: string, update: Partial<ConversationMessage>) => {
     onMessagesChange(current => current.map(message => message.id === id ? { ...message, ...update } : message))
+  }
+
+  const pickExample = (prompt: string) => {
+    setComposer(prompt)
+    requestAnimationFrame(() => {
+      const element = composerTextarea.current
+      if (!element) return
+      element.focus()
+      element.setSelectionRange(prompt.length, prompt.length)
+    })
   }
 
   const sendPrompt = async (event: FormEvent) => {
@@ -401,6 +418,14 @@ export function ChatPane({
           <div className="conversation-welcome">
             <span className="eyebrow">Build with Layla</span>
             <h2>What should we build today?</h2>
+            <div className="welcome-examples">
+              {EXAMPLE_PROMPTS.map(example => (
+                <button key={example.prompt} type="button" onClick={() => pickExample(example.prompt)}>
+                  <Icon name={example.icon} size={13} />
+                  <span>{example.prompt}</span>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="date-label">Today</div>
@@ -439,7 +464,7 @@ export function ChatPane({
         ))}
       </div>
 
-      <Composer value={composer} runState={runState} onChange={setComposer} onSubmit={sendPrompt} onStop={stopRun} />
+      <Composer value={composer} runState={runState} onChange={setComposer} onSubmit={sendPrompt} onStop={stopRun} textareaRef={composerTextarea} />
     </section>
   )
 }

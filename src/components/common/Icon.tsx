@@ -19,6 +19,9 @@ import {
   Terminal,
   Undo2,
   Bug,
+  Gamepad2,
+  ListTodo,
+  Users,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -45,6 +48,9 @@ const icons = {
   copy: Copy,
   bug: Bug,
   terminal: Terminal,
+  gamepad: Gamepad2,
+  list: ListTodo,
+  users: Users,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof icons
