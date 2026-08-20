@@ -4,6 +4,7 @@ import { applyWorkspacePatch, ApplyPatchError } from '../src/tools/applyPatch.ts
 import {
   isFreeformToolCallCandidate,
   parseFreeformToolEnvelope,
+  parseFreeformToolEnvelopes,
   serializeFreeformToolEnvelope,
 } from '../src/tools/freeformEnvelope.ts'
 import type { VirtualWorkspaceFile } from '../src/workspace/VirtualWorkspace.ts'
@@ -37,6 +38,21 @@ test('write_file envelopes preserve literal multiline content', () => {
   })
   assert.equal(isFreeformToolCallCandidate(serialized), true)
   assert.equal(parseFreeformToolEnvelope(`before\n${serialized}`), null)
+})
+
+test('multiple tool envelopes are parsed in response order', () => {
+  const content = `<tool_call name="read_file">
+{"path":"app.json"}
+</tool_call>
+<tool_call name="read_file">
+{"path":"index.html"}
+</tool_call>`
+
+  assert.deepEqual(parseFreeformToolEnvelopes(content), [
+    { name: 'read_file', payload: '{"path":"app.json"}' },
+    { name: 'read_file', payload: '{"path":"index.html"}' },
+  ])
+  assert.equal(parseFreeformToolEnvelope(content), null)
 })
 
 test('apply_patch updates, adds, and deletes files atomically', () => {
@@ -100,7 +116,7 @@ test('model protocol executes virtual workspace tools end to end', async () => {
   const server = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } })
 
   try {
-    const { parseToolCall } = await server.ssrLoadModule('/src/tools/protocol.ts')
+    const { parseToolCall, parseToolCalls } = await server.ssrLoadModule('/src/tools/protocol.ts')
     const { executeToolCall } = await server.ssrLoadModule('/src/tools/runtime.ts')
     const { buildMiniAppSystemPrompt } = await server.ssrLoadModule('/src/agent/systemPrompt.ts')
     const workspace = { files: [] as VirtualWorkspaceFile[], revision: 1 }
@@ -176,6 +192,8 @@ ${JSON.stringify({
     assert.match(systemPrompt, /Workspace: "Test Workspace" \(revision 4\)/)
     assert.match(systemPrompt, /"read_file"/)
     assert.match(systemPrompt, /"index\.html" \| text\/html/)
+    assert.match(systemPrompt, /one or more complete <tool_call> envelopes/)
+    assert.match(systemPrompt, /execute sequentially in the order emitted/)
     assert.equal(systemPrompt.includes('Hello, virtual workspace'), false)
 
     const listCall = parseToolCall(`<tool_call name="list_files">
@@ -185,6 +203,27 @@ ${JSON.stringify({
     if (!listCall.ok) return
     const listed = await executeToolCall(listCall.call, searched.workspace)
     assert.deepEqual(listed.result.data?.paths, ['index.html'])
+
+    const multipleReads = parseToolCalls(`<tool_call name="read_file">
+{"path":"index.html","startLine":1,"endLine":1}
+</tool_call>
+<tool_call name="search_files">
+{"query":"virtual workspace"}
+</tool_call>`)
+    assert.equal(multipleReads.ok, true)
+    if (!multipleReads.ok) return
+    assert.equal(multipleReads.calls.length, 2)
+    assert.notEqual(multipleReads.calls[0]?.callId, multipleReads.calls[1]?.callId)
+
+    const multipleResults = []
+    let multipleWorkspace = listed.workspace
+    for (const call of multipleReads.calls) {
+      const execution = await executeToolCall(call, multipleWorkspace)
+      multipleResults.push(execution.result)
+      multipleWorkspace = execution.workspace
+    }
+    assert.equal(multipleResults[0]?.data?.content, '<h1 data-label="raw">Hello, virtual workspace</h1>')
+    assert.equal((multipleResults[1]?.data?.matches as unknown[])?.length, 1)
 
     const deleteCall = parseToolCall(`<tool_call name="delete_file">
 ${JSON.stringify({ path: 'index.html', expectedRevision: edited.result.data?.revision })}

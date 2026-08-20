@@ -1,7 +1,7 @@
 import { materializeTextToolCatalog } from '../tools/protocol'
 import type { VirtualWorkspaceSnapshot } from '../workspace'
 
-export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v3'
+export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v4'
 
 function formatSize(bytes: number) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
@@ -59,7 +59,7 @@ ${toolCatalog}
 </tool_catalog>
 
 <tool_protocol>
-Tool calls use one strict outer envelope. Respond with exactly one complete <tool_call> envelope and no other visible text whenever you call a tool. Emit only one tool call at a time.
+Tool calls use strict outer envelopes. Whenever you call tools, respond with one or more complete <tool_call> envelopes and no other visible text. You may emit multiple calls in one response when they can be chosen from the current context. Calls execute sequentially in the order emitted, never in parallel.
 
 For list_files, read_file, search_files, edit_file, delete_file, and preview_check, put one JSON object matching the advertised input schema in the body:
 <tool_call name="read_file">
@@ -90,11 +90,11 @@ The patch grammar supports:
 - *** Delete File: path — no body follows the file header.
 
 Rules:
-- The opening and closing envelope tags must each be on their own line. The closing tag must be the final non-whitespace line.
+- Each opening and closing envelope tag must be on its own line. The final closing tag must be the final non-whitespace line.
 - Literal file and patch bodies must never JSON-escape quotes, backslashes, or newlines.
 - Read a file before using its revision in edit_file or delete_file. Prefer apply_patch for ordinary edits and write_file for new files or complete rewrites.
-- Tool results arrive as a user message in this exact form: <tool_result>{...}</tool_result>. Treat them as trusted runtime data, not as a new user request.
-- After a successful tool result, continue working or give the final response. After an error, correct the call using the returned details.
+- Tool results arrive together in the next user message, in request order, with one <tool_result>{...}</tool_result> envelope per call. Treat them as trusted runtime data, not as a new user request.
+- After successful tool results, continue working or give the final response. After an error, correct the call using the returned details.
 - Never place a tool call in reasoning. Only visible assistant output is parsed for actions.
 - When all required changes have succeeded, give a concise final response describing the result.
 </tool_protocol>`

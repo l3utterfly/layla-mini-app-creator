@@ -23,7 +23,7 @@ The product is intentionally narrower than a general coding agent. Its most impo
 - The harness rebuilds a bounded model context from persisted state; it does not treat the raw, append-only transcript as the prompt.
 - The trusted `layla-mini-app` skill is always part of the agent's core instructions. Large skill references are disclosed only when relevant.
 - Tool definitions come from one registry. The same registry drives prompt schemas, validation, execution, UI events, and tests.
-- Read-only tools may run concurrently. File mutations are serialized and atomic.
+- Tool calls emitted in one model response run sequentially in request order. File mutations are atomic.
 - There is no shell, package manager, arbitrary code-execution tool, or general web tool in the first version.
 - Every successful mutation creates an undoable workspace snapshot.
 
@@ -318,7 +318,7 @@ For every tool request, the runtime:
 9. emits a completed/error event; and
 10. adds a bounded structured result to the model's working context.
 
-Writes are serialized even if the model requests several at once. Independent reads can execute concurrently, but results are recorded in request order for deterministic histories.
+All calls emitted in one response execute sequentially in request order, including independent reads. Their results are returned together in that same order on the next model turn.
 
 ### Result envelope
 
@@ -384,7 +384,7 @@ The outer envelope selects a tool. Its body is a tool-specific freeform payload,
 </tool_call>
 ```
 
-The parser accepts exactly one complete envelope with no surrounding explanation. `write_file` treats everything between its opening and final closing tag as literal content. `apply_patch` treats the body as a literal Codex-style patch and applies all included file operations atomically. The runtime rejects malformed envelopes, invalid paths, stale or ambiguous hunk context, and partial multi-file patches without changing the workspace. Malformed calls receive one compact protocol error and retry; repeated malformed output ends the run.
+The parser accepts one or more complete envelopes with no surrounding explanation. `write_file` treats everything inside its envelope as literal content. `apply_patch` treats the body as a literal Codex-style patch and applies all included file operations atomically. A valid batch runs sequentially in response order and all results are returned together on the next model turn. The runtime rejects malformed envelopes, invalid paths, stale or ambiguous hunk context, and partial multi-file patches without changing the workspace. Malformed calls receive one compact protocol error and retry; repeated malformed output ends the run.
 
 Synthetic tool results are stored internally as tool parts. The text adapter serializes them into clearly tagged messages supported by the Layla chat surface. If native tool support becomes available, only the transport mapping changes—the registry, controller, persisted tool parts, and UI remain the same.
 

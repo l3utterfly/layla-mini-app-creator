@@ -1,4 +1,5 @@
-const envelopePattern = /^\s*<tool_call name="([a-z][a-z0-9_]*?)"(?: path="([^"\r\n]*)")?>\r?\n([\s\S]*)\r?\n<\/tool_call>\s*$/
+const openingEnvelopePattern = /<tool_call name="([a-z][a-z0-9_]*?)"(?: path="([^"\r\n]*)")?>\r?\n/y
+const closingEnvelopePattern = /\r?\n<\/tool_call>/g
 
 function escapeAttribute(value: string) {
   return value
@@ -26,14 +27,43 @@ export function isFreeformToolCallCandidate(content: string) {
   return /^<tool_call(?:\s|>)/.test(content.trimStart())
 }
 
-export function parseFreeformToolEnvelope(content: string): FreeformToolEnvelope | null {
-  const match = envelopePattern.exec(content)
-  if (!match?.[1] || match[3] === undefined) return null
-  return {
-    name: match[1],
-    ...(match[2] === undefined ? {} : { path: decodeAttribute(match[2]) }),
-    payload: match[3],
+export function parseFreeformToolEnvelopes(content: string): FreeformToolEnvelope[] | null {
+  const envelopes: FreeformToolEnvelope[] = []
+  let cursor = 0
+
+  while (cursor < content.length && /\s/.test(content[cursor]!)) cursor += 1
+
+  while (cursor < content.length) {
+    openingEnvelopePattern.lastIndex = cursor
+    const opening = openingEnvelopePattern.exec(content)
+    if (!opening?.[1]) return null
+
+    const payloadStart = openingEnvelopePattern.lastIndex
+    closingEnvelopePattern.lastIndex = payloadStart
+    let closing: RegExpExecArray | null = null
+
+    while ((closing = closingEnvelopePattern.exec(content))) {
+      const remainder = content.slice(closingEnvelopePattern.lastIndex).trimStart()
+      if (!remainder || /^<tool_call(?:\s|>)/.test(remainder)) break
+    }
+    if (!closing) return null
+
+    envelopes.push({
+      name: opening[1],
+      ...(opening[2] === undefined ? {} : { path: decodeAttribute(opening[2]) }),
+      payload: content.slice(payloadStart, closing.index),
+    })
+
+    cursor = closingEnvelopePattern.lastIndex
+    while (cursor < content.length && /\s/.test(content[cursor]!)) cursor += 1
   }
+
+  return envelopes.length ? envelopes : null
+}
+
+export function parseFreeformToolEnvelope(content: string): FreeformToolEnvelope | null {
+  const envelopes = parseFreeformToolEnvelopes(content)
+  return envelopes?.length === 1 ? envelopes[0]! : null
 }
 
 export function serializeFreeformToolEnvelope(name: string, payload: string, path?: string) {

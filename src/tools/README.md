@@ -6,7 +6,7 @@ The tool layer keeps model-facing contracts independent from chat UI and the in-
 
 - `definitions.ts` is the single source of truth for tool names, descriptions, schemas, effects, handlers, budgets, and UI presentation.
 - `registry.ts` constructs validated, typed calls and materializes the prompt-safe catalog without runtime functions.
-- `freeformEnvelope.ts` preserves payloads inside the strict `<tool_call>` transport envelope.
+- `freeformEnvelope.ts` preserves payloads inside one or more strict `<tool_call>` transport envelopes.
 - `protocol.ts` maps literal `write_file`/`apply_patch` bodies and JSON-bodied filesystem tools into canonical validated calls, and materializes the model-visible catalog.
 - `applyPatch.ts` parses and atomically applies Codex-style multi-file patches.
 - `runtime.ts` translates validated tool calls into the public `VirtualWorkspace` API; it does not own files.

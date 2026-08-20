@@ -3,6 +3,7 @@ import { materializeToolCatalog } from './registry'
 import {
   isFreeformToolCallCandidate,
   parseFreeformToolEnvelope,
+  parseFreeformToolEnvelopes,
   serializeFreeformToolEnvelope,
 } from './freeformEnvelope'
 import type { ToolCall } from './types'
@@ -55,13 +56,11 @@ export type ParsedToolCall =
   | { ok: true; call: ToolCall }
   | { ok: false; error: string }
 
-export function parseToolCall(content: string, callId?: string): ParsedToolCall {
+function parseToolEnvelope(
+  envelope: NonNullable<ReturnType<typeof parseFreeformToolEnvelope>>,
+  callId?: string,
+): ParsedToolCall {
   try {
-    const envelope = parseFreeformToolEnvelope(content)
-    if (!envelope) {
-      return { ok: false, error: 'Response is not one exact <tool_call> envelope.' }
-    }
-
     const { name, path, payload } = envelope
     if (!isKnownToolName(name)) return { ok: false, error: `Unknown tool: ${name}` }
     if (!isTextProtocolToolName(name)) {
@@ -104,4 +103,31 @@ export function parseToolCall(content: string, callId?: string): ParsedToolCall 
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Malformed tool call.' }
   }
+}
+
+export function parseToolCall(content: string, callId?: string): ParsedToolCall {
+  const envelope = parseFreeformToolEnvelope(content)
+  if (!envelope) {
+    return { ok: false, error: 'Response is not one exact <tool_call> envelope.' }
+  }
+  return parseToolEnvelope(envelope, callId)
+}
+
+export type ParsedToolCalls =
+  | { ok: true; calls: ToolCall[] }
+  | { ok: false; error: string }
+
+export function parseToolCalls(content: string): ParsedToolCalls {
+  const envelopes = parseFreeformToolEnvelopes(content)
+  if (!envelopes) {
+    return { ok: false, error: 'Response is not one or more exact <tool_call> envelopes.' }
+  }
+
+  const calls: ToolCall[] = []
+  for (const envelope of envelopes) {
+    const parsed = parseToolEnvelope(envelope)
+    if (!parsed.ok) return parsed
+    calls.push(parsed.call)
+  }
+  return { ok: true, calls }
 }

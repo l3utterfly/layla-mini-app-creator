@@ -3,7 +3,7 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { LaylaAbortError, type ChatCompletionMessageParam } from '@layla-network/sdk'
 import { buildMiniAppSystemPrompt } from '../../agent/systemPrompt'
 import { layla } from '../../lib/layla'
-import { parseToolCall } from '../../tools/protocol'
+import { parseToolCalls } from '../../tools/protocol'
 import type { ToolCall, ToolResultEnvelope, ToolRunGroup } from '../../tools/types'
 import type { ConversationMessage, RunState } from '../../types/ui'
 import type { VirtualWorkspaceSnapshot } from '../../workspace'
@@ -35,6 +35,10 @@ function reconstructRawOutput(reasoning: string, content: string) {
 
 function serializeToolResult(result: ToolResultEnvelope) {
   return `<tool_result>${JSON.stringify(result)}</tool_result>`
+}
+
+function serializeToolResults(results: ToolResultEnvelope[]) {
+  return results.map(serializeToolResult).join('\n')
 }
 
 export function ChatPane({
@@ -132,25 +136,47 @@ export function ChatPane({
         })
         contextMessages.current.push({ role: 'assistant', content: finalContent })
 
-        const parsed = parseToolCall(finalContent)
+        const parsed = parseToolCalls(finalContent)
         if (parsed.ok) {
+          let activities: ToolRunGroup['activities'] = parsed.calls.map((call, index) => ({
+            call,
+            status: index === 0 ? 'running' : 'pending',
+          }))
           const runningTool: ToolRunGroup = {
-            id: `run_${parsed.call.callId}`,
-            activities: [{ call: parsed.call, status: 'running' }],
+            id: `run_${parsed.calls[0]!.callId}`,
+            activities,
           }
           updateAssistant(assistantId, { toolRun: runningTool })
 
-          const result = await onRunTool(parsed.call)
-          const completedTool: ToolRunGroup = {
-            ...runningTool,
-            activities: [{
-              call: parsed.call,
-              status: result.ok ? 'completed' : 'error',
-              result,
-            }],
+          const results: ToolResultEnvelope[] = []
+          for (let callIndex = 0; callIndex < parsed.calls.length; callIndex += 1) {
+            if (cancellationRequested.current) {
+              activities = activities.map(activity => (
+                activity.status === 'pending' || activity.status === 'running'
+                  ? { ...activity, status: 'cancelled' }
+                  : activity
+              ))
+              updateAssistant(assistantId, {
+                toolRun: { ...runningTool, activities },
+              })
+              throw new LaylaAbortError('Generation cancelled')
+            }
+
+            const call = parsed.calls[callIndex]!
+            const result = await onRunTool(call)
+            results.push(result)
+            activities = activities.map((activity, index) => {
+              if (index === callIndex) {
+                return { call, status: result.ok ? 'completed' : 'error', result }
+              }
+              return index === callIndex + 1 ? { ...activity, status: 'running' } : activity
+            })
+            updateAssistant(assistantId, {
+              toolRun: { ...runningTool, activities },
+            })
           }
-          updateAssistant(assistantId, { toolRun: completedTool })
-          contextMessages.current.push({ role: 'user', content: serializeToolResult(result) })
+
+          contextMessages.current.push({ role: 'user', content: serializeToolResults(results) })
           continue
         }
 

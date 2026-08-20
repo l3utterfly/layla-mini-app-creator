@@ -14,6 +14,13 @@ export function ToolCallCard({ run, undone = false, onUndo, onShowPreview }: Too
   const [expanded, setExpanded] = useState(false)
   const presentation = useMemo(() => {
     const base = summarizeToolRun(run.activities)
+    if (run.activities.some(activity => activity.status === 'cancelled')) {
+      return {
+        ...base,
+        title: 'Tool batch cancelled',
+        subtitle: 'Remaining calls were not executed',
+      }
+    }
     const failedActivity = run.activities.find(activity => activity.result && !activity.result.ok)
     return failedActivity ? {
       ...base,
@@ -21,15 +28,17 @@ export function ToolCallCard({ run, undone = false, onUndo, onShowPreview }: Too
       subtitle: failedActivity.result?.error?.message,
     } : base
   }, [run])
-  const status = run.activities.some(activity => activity.status === 'error')
-    ? 'error'
-    : run.activities.some(activity => activity.status === 'running') ? 'running' : 'completed'
+  const status = run.activities.some(activity => activity.status === 'running')
+    ? 'running'
+    : run.activities.some(activity => activity.status === 'error')
+      ? 'error'
+      : run.activities.some(activity => activity.status === 'cancelled') ? 'cancelled' : 'completed'
 
   return (
     <>
       <button className="tool-card" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
         <span className={`tool-status ${status}`}>
-          {status === 'running' ? <i className="spinner" /> : <Icon name={status === 'error' ? 'x' : 'check'} size={15} />}
+          {status === 'running' ? <i className="spinner" /> : <Icon name={status === 'completed' ? 'check' : 'x'} size={15} />}
         </span>
         <span className="tool-copy"><strong>{presentation.title}</strong><small>{presentation.subtitle}</small></span>
         <Icon name="chevron" size={16} />

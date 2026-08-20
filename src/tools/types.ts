@@ -11,7 +11,7 @@ export type JsonSchema = {
 
 export type ToolEffect = 'read' | 'write' | 'diagnostic'
 export type ToolConcurrency = 'parallel' | 'serial'
-export type ToolStatus = 'pending' | 'running' | 'completed' | 'error'
+export type ToolStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 
 export type ToolPresentation = {
   title: string
