@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import type { RunState } from '../../types/ui'
 import { Icon } from '../common/Icon'
@@ -12,6 +13,18 @@ type ComposerProps = {
 
 export function Composer({ value, runState, onChange, onSubmit, onStop }: ComposerProps) {
   const isWorking = runState === 'thinking'
+  const textarea = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const element = textarea.current
+    if (!element) return
+
+    element.style.height = 'auto'
+    const maxHeight = Number.parseFloat(getComputedStyle(element).maxHeight)
+    const contentHeight = element.scrollHeight
+    element.style.height = `${Math.min(contentHeight, maxHeight)}px`
+    element.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden'
+  }, [isWorking, value])
 
   const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey) return
@@ -28,7 +41,7 @@ export function Composer({ value, runState, onChange, onSubmit, onStop }: Compos
             <span>Layla is working</span>
           </div>
         ) : (
-          <textarea value={value} onChange={event => onChange(event.target.value)} placeholder="Ask Layla to build something…" rows={1} aria-label="Message Layla" onKeyDown={submitOnEnter} />
+          <textarea ref={textarea} value={value} onChange={event => onChange(event.target.value)} placeholder="Ask Layla to build something…" rows={1} aria-label="Message Layla" onKeyDown={submitOnEnter} />
         )}
         <div className="composer-actions">
           <button type="button" className="attach-button" aria-label="Attach context" disabled={isWorking}><Icon name="attach" size={19} /></button>

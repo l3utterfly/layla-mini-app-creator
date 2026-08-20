@@ -313,6 +313,7 @@ export function ChatPane({
         if (containsToolCallMarker) {
           const failureBudget = advanceToolFailureBudget(consecutiveToolFailures, false)
           consecutiveToolFailures = failureBudget.consecutiveFailures
+          updateAssistant(assistantId, { error: parsed.error })
           console.warn('[tool-loop] rejected tool call candidate', {
             iteration: iteration + 1,
             startsWithToolCall,
@@ -407,7 +408,7 @@ export function ChatPane({
             {message.toolRun ? (
               <ToolCallCard run={message.toolRun} rawContent={message.content} />
             ) : isToolCallCandidate(message.content) ? (
-              <ToolCallDisclosure content={message.content} live={message.state === 'streaming'} />
+              <ToolCallDisclosure content={message.content} live={message.state === 'streaming'} error={message.error} />
             ) : message.state === 'streaming' ? (
               message.content
                 ? <MarkdownContent>{message.content}</MarkdownContent>

@@ -4,6 +4,7 @@ import { Icon } from '../common/Icon'
 type ToolCallDisclosureProps = {
   content: string
   live?: boolean
+  error?: string
 }
 
 function getToolNames(content: string) {
@@ -12,7 +13,7 @@ function getToolNames(content: string) {
     .filter((name): name is string => Boolean(name))
 }
 
-export function ToolCallDisclosure({ content, live = false }: ToolCallDisclosureProps) {
+export function ToolCallDisclosure({ content, live = false, error }: ToolCallDisclosureProps) {
   const [expanded, setExpanded] = useState(false)
   const toolNames = useMemo(() => getToolNames(content), [content])
   const title = toolNames.length > 1
@@ -27,12 +28,12 @@ export function ToolCallDisclosure({ content, live = false }: ToolCallDisclosure
         onClick={() => setExpanded(value => !value)}
         aria-expanded={expanded}
       >
-        <span className={`tool-status ${live ? 'running' : 'completed'}`}>
-          {live ? <i className="spinner" /> : <Icon name="check" size={15} />}
+        <span className={`tool-status ${live ? 'running' : error ? 'error' : 'completed'}`}>
+          {live ? <i className="spinner" /> : <Icon name={error ? 'x' : 'check'} size={15} />}
         </span>
         <span className="tool-copy">
           <strong>{title}</strong>
-          <small>{live ? 'Receiving tool input…' : 'Tool input received'}</small>
+          <small title={error}>{live ? 'Receiving tool input…' : error ?? 'Tool input received'}</small>
         </span>
         <Icon name="chevron" size={16} />
       </button>

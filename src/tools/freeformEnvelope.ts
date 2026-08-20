@@ -1,5 +1,5 @@
-const openingEnvelopePattern = /<tool_call name="([a-z][a-z0-9_]*?)"(?: path="([^"\r\n]*)")?>/y
-const closingEnvelopePattern = /<\/tool_call>/g
+const openingEnvelopePattern = /<tool_call\b[^>]*>/g
+const closingEnvelope = '</tool_call>'
 
 function escapeAttribute(value: string) {
   return value
@@ -36,39 +36,50 @@ function removeEnvelopeFramingNewlines(payload: string) {
   return payload.slice(start, Math.max(start, end))
 }
 
+function readAttribute(tag: string, name: 'name' | 'path') {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const doubleQuoted = tag.match(new RegExp(`\\b${escapedName}\\s*=\\s*"([^"\\r\\n]*)"`))?.[1]
+  if (doubleQuoted !== undefined) return doubleQuoted
+  return tag.match(new RegExp(`\\b${escapedName}\\s*=\\s*'([^'\\r\\n]*)'`))?.[1]
+}
+
+function findNextNamedOpening(content: string, cursor: number) {
+  openingEnvelopePattern.lastIndex = cursor
+  let opening: RegExpExecArray | null
+
+  while ((opening = openingEnvelopePattern.exec(content))) {
+    const name = readAttribute(opening[0], 'name')
+    if (name && /^[a-z][a-z0-9_]*$/.test(name)) {
+      return {
+        name,
+        path: readAttribute(opening[0], 'path'),
+        payloadStart: openingEnvelopePattern.lastIndex,
+      }
+    }
+  }
+  return null
+}
+
 export function isFreeformToolCallCandidate(content: string) {
-  return /^<tool_call(?:\s|>)/.test(content.trimStart())
+  return /<tool_call(?:\s|>)/.test(content)
 }
 
 export function parseFreeformToolEnvelopes(content: string): FreeformToolEnvelope[] | null {
   const envelopes: FreeformToolEnvelope[] = []
   let cursor = 0
 
-  while (cursor < content.length && /\s/.test(content[cursor]!)) cursor += 1
-
   while (cursor < content.length) {
-    openingEnvelopePattern.lastIndex = cursor
-    const opening = openingEnvelopePattern.exec(content)
-    if (!opening?.[1]) return null
-
-    const payloadStart = openingEnvelopePattern.lastIndex
-    closingEnvelopePattern.lastIndex = payloadStart
-    let closing: RegExpExecArray | null = null
-
-    while ((closing = closingEnvelopePattern.exec(content))) {
-      const remainder = content.slice(closingEnvelopePattern.lastIndex).trimStart()
-      if (!remainder || /^<tool_call(?:\s|>)/.test(remainder)) break
-    }
-    if (!closing) return null
+    const opening = findNextNamedOpening(content, cursor)
+    if (!opening) break
+    const closingIndex = content.indexOf(closingEnvelope, opening.payloadStart)
+    if (closingIndex === -1) break
 
     envelopes.push({
-      name: opening[1],
-      ...(opening[2] === undefined ? {} : { path: decodeAttribute(opening[2]) }),
-      payload: removeEnvelopeFramingNewlines(content.slice(payloadStart, closing.index)),
+      name: opening.name,
+      ...(opening.path === undefined ? {} : { path: decodeAttribute(opening.path) }),
+      payload: removeEnvelopeFramingNewlines(content.slice(opening.payloadStart, closingIndex)),
     })
-
-    cursor = closingEnvelopePattern.lastIndex
-    while (cursor < content.length && /\s/.test(content[cursor]!)) cursor += 1
+    cursor = closingIndex + closingEnvelope.length
   }
 
   return envelopes.length ? envelopes : null

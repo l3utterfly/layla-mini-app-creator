@@ -108,7 +108,7 @@ function parseToolEnvelope(
 export function parseToolCall(content: string, callId?: string): ParsedToolCall {
   const envelope = parseFreeformToolEnvelope(content)
   if (!envelope) {
-    return { ok: false, error: 'Response is not one exact <tool_call> envelope.' }
+    return { ok: false, error: 'Response does not contain exactly one complete named <tool_call> envelope.' }
   }
   return parseToolEnvelope(envelope, callId)
 }
@@ -120,7 +120,7 @@ export type ParsedToolCalls =
 export function parseToolCalls(content: string): ParsedToolCalls {
   const envelopes = parseFreeformToolEnvelopes(content)
   if (!envelopes) {
-    return { ok: false, error: 'Response is not one or more exact <tool_call> envelopes.' }
+    return { ok: false, error: 'Response does not contain a complete named <tool_call> envelope.' }
   }
 
   const calls: ToolCall[] = []

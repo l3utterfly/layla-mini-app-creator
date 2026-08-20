@@ -28,7 +28,7 @@ function normalizePath(path: string) {
 }
 
 test('write_file envelopes preserve literal multiline content', () => {
-  const content = `const value = { quote: "hello", slash: "c:\\tmp" }\n</tool_call>\n<section>still content</section>\n`
+  const content = `const value = { quote: "hello", slash: "c:\\tmp" }\n<section>still content</section>\n`
   const serialized = serializeFreeformToolEnvelope('write_file', content, 'pages/a&b.html')
   const parsed = parseFreeformToolEnvelope(serialized)
 
@@ -38,7 +38,11 @@ test('write_file envelopes preserve literal multiline content', () => {
     payload: content,
   })
   assert.equal(isFreeformToolCallCandidate(serialized), true)
-  assert.equal(parseFreeformToolEnvelope(`before\n${serialized}`), null)
+  assert.deepEqual(parseFreeformToolEnvelope(`malformed prefix\n${serialized}\n<tool_call>\n</tool_call>\nmalformed suffix`), {
+    name: 'write_file',
+    path: 'pages/a&b.html',
+    payload: content,
+  })
 })
 
 test('multiple tool envelopes are parsed in response order', () => {
@@ -63,6 +67,59 @@ test('tool envelopes accept inline whitespace around JSON payloads', () => {
     name: 'read_file',
     payload: ' {"path":".agent/layla-sdk/references/sdk-api.md","startLine":1,"endLine":200} ',
   })
+})
+
+test('redundant bare tool_call wrappers are repaired without changing named payloads', () => {
+  const content = `<tool_call>
+<tool_call name="read_file">
+{"path":"index.html"}
+</tool_call>
+<tool_call>
+<tool_call name="read_file">
+{"path":"app.json"}
+</tool_call>
+<tool_call>
+<tool_call name="read_file">
+{"path":".agent/layla-sdk/references/sdk-api.md"}
+</tool_call>`
+
+  assert.deepEqual(parseFreeformToolEnvelopes(content), [
+    { name: 'read_file', payload: '{"path":"index.html"}' },
+    { name: 'read_file', payload: '{"path":"app.json"}' },
+    { name: 'read_file', payload: '{"path":".agent/layla-sdk/references/sdk-api.md"}' },
+  ])
+
+  const balancedWrapper = `<tool_call>
+<tool_call name="read_file">
+{"path":"index.html"}
+</tool_call>
+</tool_call>`
+  assert.deepEqual(parseFreeformToolEnvelope(balancedWrapper), {
+    name: 'read_file',
+    payload: '{"path":"index.html"}',
+  })
+})
+
+test('extracts complete named calls from malformed surrounding wrappers and trailing tags', () => {
+  const content = `stray prose
+</tool_call>
+<tool_call>
+<tool_call   name = 'read_file' >
+{"path":"index.html"}
+</tool_call>
+</tool_call>
+<broken>
+<tool_call name="read_file">
+{"path":"app.json"}
+</tool_call>
+<tool_call>
+</tool_call>
+<tool_call>`
+
+  assert.deepEqual(parseFreeformToolEnvelopes(content), [
+    { name: 'read_file', payload: '{"path":"index.html"}' },
+    { name: 'read_file', payload: '{"path":"app.json"}' },
+  ])
 })
 
 test('only consecutive failed tool calls consume the failure budget', () => {
@@ -151,6 +208,18 @@ test('model protocol executes virtual workspace tools end to end', async () => {
     const { executeToolCall } = await server.ssrLoadModule('/src/tools/runtime.ts')
     const { buildMiniAppSystemPrompt } = await server.ssrLoadModule('/src/agent/systemPrompt.ts')
     const workspace = { files: [] as VirtualWorkspaceFile[], revision: 1 }
+    const repairedReadCalls = parseToolCalls(`<tool_call>
+<tool_call name="read_file">
+{"path":"index.html"}
+</tool_call>
+<tool_call>
+<tool_call name="read_file">
+{"path":"app.json"}
+</tool_call>`)
+    assert.equal(repairedReadCalls.ok, true)
+    if (!repairedReadCalls.ok) return
+    assert.deepEqual(repairedReadCalls.calls.map(call => call.arguments.path), ['index.html', 'app.json'])
+
     const writeEnvelope = `<tool_call name="write_file" path="index.html">
 <h1 data-label="raw">Hello</h1>
 </tool_call>`
