@@ -5,6 +5,23 @@ import {
   VirtualWorkspace,
   VirtualWorkspaceError,
 } from '../src/workspace/VirtualWorkspace.ts'
+import { scaffoldWorkspaceFiles } from '../src/data/scaffoldWorkspace.ts'
+
+test('ships a valid two-file Layla mini-app scaffold', () => {
+  assert.deepEqual(scaffoldWorkspaceFiles.map(file => file.name), ['app.json', 'index.html'])
+
+  const manifest = JSON.parse(scaffoldWorkspaceFiles[0]!.content) as Record<string, unknown>
+  assert.equal(manifest.title, 'Untitled Mini-App')
+  assert.equal(typeof manifest.tagline, 'string')
+  assert.equal(typeof manifest.description, 'string')
+
+  const html = scaffoldWorkspaceFiles[1]!.content
+  assert.match(html, /<!doctype html>/i)
+  assert.match(html, /LLM: Replace the contents of main/)
+  assert.match(html, /cdn\.jsdelivr\.net\/npm\/@layla-network\/sdk@7\.3\.3\/\+esm/)
+  assert.match(html, /layla\.contextual\.getExecutionContext\(\)/)
+  assert.match(html, /console\.log\("\[Layla mini-app\] execution context:"/)
+})
 
 test('normalizes workspace-relative paths and rejects escapes', () => {
   assert.equal(normalizeWorkspacePath('./pages\\home.html'), 'pages/home.html')

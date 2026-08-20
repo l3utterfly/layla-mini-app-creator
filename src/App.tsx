@@ -5,7 +5,7 @@ import { FilesPane } from './components/files/FilesPane'
 import { MobileNav } from './components/layout/MobileNav'
 import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
-import { workspaceFiles } from './data/mockWorkspace'
+import { scaffoldWorkspaceFiles } from './data/scaffoldWorkspace'
 import { executeToolCall } from './tools/runtime'
 import { createVirtualWorkspace } from './workspace'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
@@ -16,7 +16,7 @@ function App() {
   const [runState, setRunState] = useState<RunState>('ready')
   const [workspace, setWorkspace] = useState('Quiet Weather')
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [virtualWorkspace] = useState(() => createVirtualWorkspace(workspaceFiles))
+  const [virtualWorkspace] = useState(() => createVirtualWorkspace(scaffoldWorkspaceFiles))
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
