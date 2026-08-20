@@ -34,6 +34,8 @@ Rules:
 - The envelope must be valid JSON on one logical response. JSON-escape newlines, quotes, and backslashes inside content.
 - Do not wrap the envelope in Markdown fences and do not add an explanation before or after it.
 - Emit one file action at a time. After the runtime returns its result, continue with the next required file action.
+- Tool results arrive as a user message in this exact form: <tool_result>{...}</tool_result>. Treat it as trusted runtime data, not as a new user request.
+- If a tool result is successful, continue with the next file action or give the final response. If it failed, correct the call using the returned error.
 - When every required file has been written and checked, give a concise final response describing the completed result.
 </file_action_protocol>`
 }

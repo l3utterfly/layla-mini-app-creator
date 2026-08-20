@@ -16,6 +16,7 @@ import {
   Send,
   Sparkles,
   Undo2,
+  Bug,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -39,6 +40,7 @@ const icons = {
   download: Download,
   folder: Folder,
   copy: Copy,
+  bug: Bug,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof icons

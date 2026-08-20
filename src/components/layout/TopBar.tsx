@@ -9,6 +9,8 @@ type TopBarProps = {
   onToggleWorkspaceMenu: () => void
   onSelectWorkspace: (workspace: string) => void
   onToggleFiles: () => void
+  onOpenDebug: () => void
+  debugCount: number
 }
 
 export function TopBar({
@@ -18,6 +20,8 @@ export function TopBar({
   onToggleWorkspaceMenu,
   onSelectWorkspace,
   onToggleFiles,
+  onOpenDebug,
+  debugCount,
 }: TopBarProps) {
   return (
     <header className="topbar">
@@ -28,6 +32,9 @@ export function TopBar({
       </button>
 
       <div className="topbar-actions">
+        <button className="debug-button" aria-label="Show raw model outputs" onClick={onOpenDebug}>
+          <Icon name="bug" size={16} /><span>Debug</span>{debugCount > 0 && <small>{debugCount}</small>}
+        </button>
         <button className="icon-button desktop-files-button" aria-label={activeTab === 'files' ? 'Close files' : 'Open files'} onClick={onToggleFiles}>
           <Icon name="folder" />
         </button>

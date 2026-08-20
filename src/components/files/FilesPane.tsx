@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { workspaceFiles } from '../../data/mockWorkspace'
+import type { WorkspaceFile } from '../../types/ui'
 import { Icon } from '../common/Icon'
 import { CodeEditor } from './CodeEditor'
 
-type FilesPaneProps = { active: boolean }
+type FilesPaneProps = { active: boolean; files: WorkspaceFile[] }
 
-export function FilesPane({ active }: FilesPaneProps) {
+export function FilesPane({ active, files }: FilesPaneProps) {
   const [selectedFileName, setSelectedFileName] = useState('index.html')
-  const selectedFile = workspaceFiles.find(file => file.name === selectedFileName) ?? workspaceFiles[0]
+  const selectedFile = files.find(file => file.name === selectedFileName) ?? files[0]
 
   return (
     <section className={`files-pane pane ${active ? 'mobile-active' : ''}`} aria-label="Files">
@@ -17,8 +17,8 @@ export function FilesPane({ active }: FilesPaneProps) {
       </div>
       <div className="file-browser">
         <div className="files-list">
-          <div className="folder-row"><Icon name="folder" size={17} /><strong>quiet-weather</strong><span>{workspaceFiles.length} files</span></div>
-          {workspaceFiles.map(file => (
+          <div className="folder-row"><Icon name="folder" size={17} /><strong>quiet-weather</strong><span>{files.length} files</span></div>
+          {files.map(file => (
             <button key={file.name} className={selectedFileName === file.name ? 'active' : ''} onClick={() => setSelectedFileName(file.name)}>
               <span className="file-type" style={{ color: file.color }}>{file.type.slice(0, 2)}</span>
               <span>{file.name}</span><small>{file.size}</small>
