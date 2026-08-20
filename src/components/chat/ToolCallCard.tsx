@@ -5,12 +5,13 @@ import { Icon } from '../common/Icon'
 
 type ToolCallCardProps = {
   run: ToolRunGroup
+  rawContent?: string
   undone?: boolean
   onUndo?: () => void
   onShowPreview?: () => void
 }
 
-export function ToolCallCard({ run, undone = false, onUndo, onShowPreview }: ToolCallCardProps) {
+export function ToolCallCard({ run, rawContent, undone = false, onUndo, onShowPreview }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false)
   const presentation = useMemo(() => {
     const base = summarizeToolRun(run.activities)
@@ -36,7 +37,7 @@ export function ToolCallCard({ run, undone = false, onUndo, onShowPreview }: Too
 
   return (
     <>
-      <button className="tool-card" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
+      <button type="button" className="tool-card" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
         <span className={`tool-status ${status}`}>
           {status === 'running' ? <i className="spinner" /> : <Icon name={status === 'completed' ? 'check' : 'x'} size={15} />}
         </span>
@@ -49,6 +50,7 @@ export function ToolCallCard({ run, undone = false, onUndo, onShowPreview }: Too
           {presentation.details?.map(detail => (
             <div key={detail.label}><Icon name="file" size={15} /> {detail.label} <span>{detail.value}</span></div>
           ))}
+          {rawContent && <pre className="tool-code-block"><code>{rawContent}</code></pre>}
         </div>
       )}
 

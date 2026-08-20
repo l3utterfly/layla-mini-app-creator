@@ -3,13 +3,15 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { LaylaAbortError, type ChatCompletionMessageParam } from '@layla-network/sdk'
 import { buildMiniAppSystemPrompt } from '../../agent/systemPrompt'
 import { layla } from '../../lib/layla'
-import { parseToolCalls } from '../../tools/protocol'
+import { isToolCallCandidate, parseToolCalls } from '../../tools/protocol'
 import type { ToolCall, ToolResultEnvelope, ToolRunGroup } from '../../tools/types'
 import type { ConversationMessage, RunState } from '../../types/ui'
 import type { VirtualWorkspaceSnapshot } from '../../workspace'
 import { AssistantMessage } from './AssistantMessage'
 import { Composer } from './Composer'
+import { MarkdownContent } from './MarkdownContent'
 import { ToolCallCard } from './ToolCallCard'
+import { ToolCallDisclosure } from './ToolCallDisclosure'
 import { Icon } from '../common/Icon'
 
 type ChatPaneProps = {
@@ -55,10 +57,19 @@ export function ChatPane({
   const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
   const contextMessages = useRef<ChatCompletionMessageParam[]>([])
   const cancellationRequested = useRef(false)
+  const conversation = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => {
     activeStream.current?.abort()
   }, [])
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const element = conversation.current
+      if (element) element.scrollTop = element.scrollHeight
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [messages])
 
   const updateAssistant = (id: string, update: Partial<ConversationMessage>) => {
     onMessagesChange(current => current.map(message => message.id === id ? { ...message, ...update } : message))
@@ -222,31 +233,35 @@ export function ChatPane({
         <span className="ready-badge"><i /> Ready</span>
       </div>
 
-      <div className="conversation">
+      <div className="conversation" ref={conversation}>
         {messages.length > 0 && <div className="date-label">Today</div>}
         {messages.map(message => message.role === 'user' ? (
           <article className="user-message" key={message.id}><p>{message.content}</p></article>
         ) : (
           <AssistantMessage key={message.id} live={message.state === 'streaming'}>
             {message.reasoning && (
-              <div className="reasoning-output"><span>Thinking</span><pre>{message.reasoning}</pre></div>
+              <div className="reasoning-output"><span>Thinking</span><MarkdownContent className="reasoning-markdown">{message.reasoning}</MarkdownContent></div>
             )}
             {message.toolRun ? (
-              <ToolCallCard run={message.toolRun} />
+              <ToolCallCard run={message.toolRun} rawContent={message.content} />
+            ) : isToolCallCandidate(message.content) ? (
+              <ToolCallDisclosure content={message.content} live={message.state === 'streaming'} />
             ) : message.state === 'streaming' ? (
               message.content
-                ? <pre className="raw-assistant-output">{message.content}</pre>
+                ? <MarkdownContent>{message.content}</MarkdownContent>
                 : <div className="thinking-row"><span className="thinking-dots"><i /><i /><i /></span><span>Waiting for the model…</span></div>
             ) : message.state === 'cancelled' ? (
-              <p className="cancelled-copy">{message.content || 'Stopped. No incomplete tool call was executed.'}</p>
+              message.content
+                ? <MarkdownContent className="cancelled-copy">{message.content}</MarkdownContent>
+                : <p className="cancelled-copy">Stopped. No incomplete tool call was executed.</p>
             ) : message.state === 'error' ? (
               <>
-                {message.content && <pre className="raw-assistant-output">{message.content}</pre>}
+                {message.content && <MarkdownContent>{message.content}</MarkdownContent>}
                 <p className="cancelled-copy">{message.error || 'The inference request failed.'}</p>
               </>
             ) : (
               <>
-                <pre className="raw-assistant-output">{message.content}</pre>
+                <MarkdownContent>{message.content}</MarkdownContent>
                 <div className="compact-success"><Icon name="check" size={14} /> Response complete</div>
               </>
             )}

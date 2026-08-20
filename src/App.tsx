@@ -66,7 +66,11 @@ function App() {
           onRunTool={runTool}
           getWorkspaceSnapshot={() => virtualWorkspace.snapshot()}
         />
-        <PreviewPane active={activeTab === 'preview'} workspace={workspace} />
+        <PreviewPane
+          active={activeTab === 'preview'}
+          indexHtml={files.find(file => file.name === 'index.html')?.content ?? ''}
+          workspace={workspace}
+        />
         <FilesPane active={activeTab === 'files'} files={files} />
       </main>
 

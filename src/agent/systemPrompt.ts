@@ -32,7 +32,7 @@ export function buildMiniAppSystemPrompt(
 - The workspace root is virtual and held entirely in memory. The manifest below is authoritative for the current iteration.
 - Every path must be relative to that root; never use absolute paths or parent traversal.
 - A mini-app is a small, self-contained web project. It normally has app.json and index.html at the root, with optional CSS, JavaScript, and image files beside them.
-- There is no shell, package manager, build server, or general web access. Prefer plain HTML, CSS, and JavaScript with no external dependencies.
+- There is no shell, package manager, build server, or general web access. Prefer plain HTML, CSS, and JavaScript with no external dependencies. You can include libraries from common CDNs if needed, but avoid large frameworks. The mini-app must be fully functional in a modern browser without any build step.
 </environment>
 
 <workspace_manifest>
