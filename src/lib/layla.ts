@@ -1,5 +1,6 @@
 import {
   LaylaSDK,
+  LaylaBridgeUnavailableError,
   installLaylaMock,
   type LaylaChatMessage,
 } from '@layla-network/sdk'
@@ -175,3 +176,10 @@ if (import.meta.env.DEV) {
 }
 
 export const layla = new LaylaSDK()
+
+export function relayLaylaMessageToHost(rawMessage: string) {
+  const bridge = window.ReactNativeWebView
+  if (!bridge) throw new LaylaBridgeUnavailableError()
+
+  bridge.postMessage(rawMessage)
+}

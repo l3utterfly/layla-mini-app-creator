@@ -30,7 +30,7 @@ export function FilesPane({ active, files }: FilesPaneProps) {
       </div>
       <div className="file-browser">
         <div className="files-list">
-          <div className="folder-row"><Icon name="folder" size={17} /><strong>quiet-weather</strong><span>{files.length} files</span></div>
+          <div className="folder-row"><Icon name="folder" size={17} /><strong>My Workspace</strong><span>{files.length} files</span></div>
           {files.map(file => {
             const appearance = fileAppearance(file.name)
             return (

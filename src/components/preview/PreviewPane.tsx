@@ -1,5 +1,12 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../common/Icon'
+import { relayLaylaMessageToHost } from '../../lib/layla'
+import {
+  createPreviewBridgeError,
+  injectPreviewBridge,
+  isLaylaHostEventMessage,
+  isPreviewBridgeRequest,
+} from './previewBridge'
 
 type PreviewPaneProps = {
   active: boolean
@@ -11,12 +18,42 @@ type PreviewPaneProps = {
 export function PreviewPane({ active, indexHtml, refreshToken, workspace }: PreviewPaneProps) {
   const [previewKey, setPreviewKey] = useState(0)
   const [fullPreview, setFullPreview] = useState(false)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useLayoutEffect(() => {
+    const relayMessage = (event: MessageEvent<unknown>) => {
+      const previewWindow = iframeRef.current?.contentWindow
+      if (!previewWindow) return
+
+      if (event.source === previewWindow) {
+        if (!isPreviewBridgeRequest(event.data)) return
+
+        try {
+          relayLaylaMessageToHost(event.data.message)
+        } catch (error) {
+          const message = error instanceof Error
+            ? error.message
+            : 'Unable to reach the Layla host.'
+          previewWindow.postMessage(createPreviewBridgeError(message), '*')
+        }
+        return
+      }
+
+      if (isLaylaHostEventMessage(event.data)) {
+        previewWindow.postMessage(event.data, '*')
+      }
+    }
+
+    window.addEventListener('message', relayMessage)
+    return () => window.removeEventListener('message', relayMessage)
+  }, [])
 
   const preview = (
     <iframe
+      ref={iframeRef}
       key={`${refreshToken}-${previewKey}`}
       className="preview-iframe"
-      srcDoc={indexHtml}
+      srcDoc={injectPreviewBridge(indexHtml)}
       title={`${workspace} preview`}
     />
   )
