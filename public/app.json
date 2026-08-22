@@ -1,0 +1,7 @@
+{
+  "title": "Layla Mini-App Creator",
+  "tagline": "Build and refine Layla mini-apps from your phone.",
+  "description": "A phone-first coding workspace for creating, previewing, and exporting self-contained Layla mini-apps with AI assistance.",
+  "iconUri": "icon.png",
+  "backgroundImgUri": "bg.png"
+}
