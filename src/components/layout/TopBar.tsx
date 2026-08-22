@@ -15,6 +15,7 @@ type TopBarProps = {
   onCreateWorkspace: () => void
   onSelectWorkspace: (workspaceId: string) => void
   onRenameWorkspace: () => void
+  onDeleteWorkspace: () => void
   onToggleFiles: () => void
   onOpenDebug: () => void
   debugCount: number
@@ -33,6 +34,7 @@ export function TopBar({
   onCreateWorkspace,
   onSelectWorkspace,
   onRenameWorkspace,
+  onDeleteWorkspace,
   onToggleFiles,
   onOpenDebug,
   debugCount,
@@ -41,7 +43,7 @@ export function TopBar({
   // rendering empty if that read has not landed or failed.
   const entries = workspaces.length
     ? workspaces
-    : [{ id: activeWorkspaceId, name: workspace, subtitle: 'Edited just now' }]
+    : [{ id: activeWorkspaceId, name: workspace, subtitle: 'Edited just now', updatedAt: 0 }]
 
   return (
     <header className="topbar">
@@ -92,6 +94,10 @@ export function TopBar({
           <button type="button" role="menuitem" onClick={onRenameWorkspace}>
             <span className="workspace-icon"><Icon name="pencil" size={15} /></span>
             <span><strong>Rename workspace</strong></span>
+          </button>
+          <button type="button" role="menuitem" className="danger" onClick={onDeleteWorkspace} disabled={busy}>
+            <span className="workspace-icon"><Icon name="trash" size={15} /></span>
+            <span><strong>Delete workspace</strong></span>
           </button>
         </div>
       )}

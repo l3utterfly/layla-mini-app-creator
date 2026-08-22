@@ -12,6 +12,8 @@ export type WorkspaceMenuEntry = {
   id: string
   name: string
   subtitle: string
+  /** Kept unformatted so callers can rank workspaces by recency. */
+  updatedAt: number
 }
 
 export type ConversationMessage = {

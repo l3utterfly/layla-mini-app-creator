@@ -200,6 +200,69 @@ test('a second workspace is isolated from the first and becomes active', async (
   assert.equal(await reopened.getActiveWorkspaceId(), second.id)
 })
 
+test('deleting a workspace clears its blobs and leaves the others intact', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const kept = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  const doomed = await repository.createWorkspace({ name: 'Scratch', files: seedFiles })
+
+  const before = readIndex(tracking)
+  const keptBlobs = before.workspaces[0]!.files.map(file => file.blob)
+  const doomedBlobs = before.workspaces[1]!.files.map(file => file.blob)
+
+  await repository.deleteWorkspace(doomed.id)
+
+  const index = readIndex(tracking)
+  assert.deepEqual(index.workspaces.map(entry => entry.id), [kept.id])
+  // The deleted workspace was active, so nothing is active until one is chosen.
+  assert.equal(index.activeWorkspaceId, null)
+  assert.deepEqual(index.orphanedBlobs, [])
+
+  for (const blob of doomedBlobs) assert.equal(tracking.contents.get(blob), '')
+  for (const blob of keptBlobs) assert.notEqual(tracking.contents.get(blob), '')
+
+  const reopened = createWorkspaceRepository(tracking.store)
+  assert.equal((await reopened.hydrateWorkspace(kept.id)).readFile('index.html').content, '<h1>Weather</h1>')
+  await assert.rejects(
+    () => reopened.hydrateWorkspace(doomed.id),
+    (error: WorkspacePersistenceError) => error.code === 'WORKSPACE_NOT_FOUND',
+  )
+})
+
+test('blobs a delete cannot clear survive in the index until a sweep', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const doomed = await repository.createWorkspace({ name: 'Scratch', files: seedFiles })
+  const stubborn = readIndex(tracking).workspaces[0]!.files[0]!.blob
+
+  tracking.failWrites.add(stubborn)
+  await repository.deleteWorkspace(doomed.id)
+
+  // The entry is gone either way; only the space reclamation is outstanding.
+  const index = readIndex(tracking)
+  assert.deepEqual(index.workspaces, [])
+  assert.deepEqual(index.orphanedBlobs, [stubborn])
+
+  tracking.failWrites.clear()
+  assert.equal(await repository.sweepOrphanedBlobs(), 1)
+  assert.deepEqual(readIndex(tracking).orphanedBlobs, [])
+  assert.equal(tracking.contents.get(stubborn), '')
+})
+
+test('deleting an unknown workspace fails without changing the index', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+
+  tracking.writes.length = 0
+  await assert.rejects(
+    () => repository.deleteWorkspace('wkmissing'),
+    (error: WorkspacePersistenceError) => error.code === 'WORKSPACE_NOT_FOUND',
+  )
+  assert.deepEqual(tracking.writes, [])
+  assert.equal(readIndex(tracking).workspaces.length, 1)
+})
+
 test('new workspace names avoid colliding with existing ones', () => {
   assert.equal(nextWorkspaceName([]), 'New workspace')
   assert.equal(nextWorkspaceName(['Weather']), 'New workspace')

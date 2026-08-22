@@ -6,6 +6,7 @@ import { MobileNav } from './components/layout/MobileNav'
 import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
 import { RenameWorkspaceDialog } from './components/layout/RenameWorkspaceDialog'
+import { DeleteWorkspaceDialog } from './components/layout/DeleteWorkspaceDialog'
 import { nextWorkspaceName } from './data/bootstrapWorkspace'
 import { scaffoldWorkspaceFiles } from './data/scaffoldWorkspace'
 import { executeToolCall } from './tools/runtime'
@@ -77,7 +78,21 @@ function describeWorkspaces(summaries: WorkspaceSummary[]): WorkspaceMenuEntry[]
     id: summary.id,
     name: summary.name,
     subtitle: formatEdited(summary.updatedAt, now),
+    updatedAt: summary.updatedAt,
   }))
+}
+
+/** The workspace to fall back to when `excludedId` goes away: the most recently edited one. */
+function mostRecentlyEdited<TEntry extends { id: string; updatedAt: number }>(
+  entries: TEntry[],
+  excludedId: string,
+) {
+  return entries
+    .filter(entry => entry.id !== excludedId)
+    .reduce<TEntry | null>(
+      (best, entry) => (best && best.updatedAt >= entry.updatedAt ? best : entry),
+      null,
+    )
 }
 
 function readFileAsDataUrl(file: File) {
@@ -103,6 +118,7 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
@@ -162,17 +178,33 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
     setSession(current => ({ ...current, name: summary.name }))
   }
 
+  const refreshWorkspaces = async () => {
+    const summaries = await repository.listWorkspaces()
+    setWorkspaces(describeWorkspaces(summaries))
+    return summaries
+  }
+
   const openWorkspaceMenu = async () => {
     setOptionsMenuOpen(false)
     setWorkspaceMenuOpen(value => !value)
     // The list is read when the menu opens so it never shows a stale name or
     // a workspace another surface created.
-    setWorkspaces(describeWorkspaces(await repository.listWorkspaces()))
+    await refreshWorkspaces()
+  }
+
+  const openDeleteDialog = async () => {
+    setOptionsMenuOpen(false)
+    // The dialog names the workspace that will replace this one, so the list
+    // is refreshed before it renders. The index is cached, so this is instant.
+    await refreshWorkspaces().catch(() => undefined)
+    setDeleteOpen(true)
   }
 
   /** Rebinds the whole UI to a workspace that is already in the index. */
   const bindWorkspace = async (targetId: string) => {
+    console.log('TRACE bind:start', targetId, 'derived', derivedFiles.length)
     const workspace = await repository.hydrateWorkspace(targetId, { derivedFiles })
+    console.log('TRACE bind:hydrated')
     await repository.setActiveWorkspace(targetId)
     const summaries = await repository.listWorkspaces()
 
@@ -196,19 +228,33 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
    * first: autosave debounces its writes, and its own teardown flush would
    * only run after React had already swapped the session out.
    */
-  const changeWorkspace = async (change: () => Promise<void>, failure: string) => {
+  const changeWorkspace = async (change: () => Promise<void>) => {
     if (changingWorkspaceRef.current) return
     changingWorkspaceRef.current = true
     setSwitching(true)
     try {
+      console.log('TRACE change:flushing')
       await autosaveRef.current?.flush()
+      console.log('TRACE change:flushed')
       await change()
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : failure)
+      console.log('TRACE change:changed')
     } finally {
       changingWorkspaceRef.current = false
       setSwitching(false)
     }
+  }
+
+  const reportFailure = (failure: string) => (error: unknown) => {
+    setSaveError(error instanceof Error ? error.message : failure)
+  }
+
+  const scaffoldNewWorkspace = async () => {
+    const summaries = await repository.listWorkspaces()
+    const created = await repository.createWorkspace({
+      name: nextWorkspaceName(summaries.map(entry => entry.name)),
+      files: scaffoldWorkspaceFiles,
+    })
+    await bindWorkspace(created.id)
   }
 
   const openWorkspace = (targetId: string) => {
@@ -216,19 +262,32 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
       setWorkspaceMenuOpen(false)
       return
     }
-    void changeWorkspace(() => bindWorkspace(targetId), 'Unable to open that workspace.')
+    void changeWorkspace(() => bindWorkspace(targetId))
+      .catch(reportFailure('Unable to open that workspace.'))
   }
 
   const createWorkspace = () => {
-    void changeWorkspace(async () => {
-      const summaries = await repository.listWorkspaces()
-      const created = await repository.createWorkspace({
-        name: nextWorkspaceName(summaries.map(entry => entry.name)),
-        files: scaffoldWorkspaceFiles,
-      })
-      await bindWorkspace(created.id)
-    }, 'Unable to create a workspace.')
+    void changeWorkspace(scaffoldNewWorkspace).catch(reportFailure('Unable to create a workspace.'))
   }
+
+  /**
+   * Deletion is irreversible and always leaves the app on some workspace, so
+   * the UI never has to render an empty state: the most recently edited
+   * survivor if there is one, a fresh scaffold otherwise. Errors are rethrown
+   * for the confirmation dialog to show in place.
+   */
+  const deleteWorkspace = () => changeWorkspace(async () => {
+    console.log('TRACE delete:start', session.id)
+    await repository.deleteWorkspace(session.id)
+    console.log('TRACE delete:deleted')
+    const remaining = await repository.listWorkspaces()
+    console.log('TRACE delete:listed', remaining.length)
+    const successor = mostRecentlyEdited(remaining, session.id)
+    console.log('TRACE delete:successor', successor && successor.id)
+    if (successor) await bindWorkspace(successor.id)
+    else await scaffoldNewWorkspace()
+    console.log('TRACE delete:done')
+  })
 
   const runTool = async (call: ToolCall): Promise<ToolResultEnvelope> => {
     const execution = await executeToolCall(call, activeWorkspace)
@@ -305,6 +364,7 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
           setOptionsMenuOpen(false)
           setRenameOpen(true)
         }}
+        onDeleteWorkspace={() => void openDeleteDialog()}
         onToggleFiles={() => selectTab(activeTab === 'files' ? 'chat' : 'files')}
         onOpenDebug={() => setDebugOpen(true)}
         debugCount={messages.filter(message => message.role === 'assistant' && message.rawOutput).length}
@@ -344,6 +404,14 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
           currentName={workspace}
           onRename={renameWorkspace}
           onClose={() => setRenameOpen(false)}
+        />
+      )}
+      {deleteOpen && (
+        <DeleteWorkspaceDialog
+          workspaceName={workspace}
+          successorName={mostRecentlyEdited(workspaces, session.id)?.name ?? null}
+          onDelete={deleteWorkspace}
+          onClose={() => setDeleteOpen(false)}
         />
       )}
     </div>

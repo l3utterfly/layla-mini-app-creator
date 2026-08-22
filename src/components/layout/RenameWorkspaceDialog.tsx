@@ -39,7 +39,7 @@ export function RenameWorkspaceDialog({ currentName, onRename, onClose }: Rename
       }}
     >
       <form
-        className="rename-dialog"
+        className="dialog-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="rename-title"
@@ -65,9 +65,9 @@ export function RenameWorkspaceDialog({ currentName, onRename, onClose }: Rename
           onChange={event => setName(event.target.value)}
         />
 
-        {error && <p className="rename-error">{error}</p>}
+        {error && <p className="dialog-error">{error}</p>}
 
-        <div className="rename-actions">
+        <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className="primary" disabled={!canSave}>
             {saving ? 'Saving…' : 'Rename'}

@@ -49,6 +49,11 @@ export type PersistedIndex = {
   updatedAt: number
   activeWorkspaceId: string | null
   workspaces: PersistedWorkspaceEntry[]
+  /**
+   * Blobs left behind by a deleted workspace. They outlive the entry that
+   * listed them, so they are tracked here rather than on a tombstone entry.
+   */
+  orphanedBlobs?: string[]
 }
 
 /** Workspace metadata for list UI, without loading any file content. */

@@ -23,6 +23,7 @@ export function createEmptyIndex(now: number): PersistedIndex {
     updatedAt: now,
     activeWorkspaceId: null,
     workspaces: [],
+    orphanedBlobs: [],
   }
 }
 
@@ -72,15 +73,21 @@ function normalizeFileEntry(value: unknown, filename: string): PersistedFileEntr
   }
 }
 
+function normalizeOrphanedBlobs(value: unknown, filename: string, field: string) {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) corrupt(filename, `${field} must be an array.`)
+  return value.map(blob => requireString(blob, filename, `${field}[]`))
+}
+
 function normalizeWorkspaceEntry(value: unknown, filename: string): PersistedWorkspaceEntry {
   if (!isRecord(value)) corrupt(filename, 'each workspace entry must be an object.')
   if (!Array.isArray(value.files)) corrupt(filename, 'workspaces[].files must be an array.')
 
-  const orphanedBlobs = value.orphanedBlobs === undefined
-    ? []
-    : Array.isArray(value.orphanedBlobs)
-      ? value.orphanedBlobs.map(blob => requireString(blob, filename, 'orphanedBlobs[]'))
-      : corrupt(filename, 'workspaces[].orphanedBlobs must be an array.')
+  const orphanedBlobs = normalizeOrphanedBlobs(
+    value.orphanedBlobs,
+    filename,
+    'workspaces[].orphanedBlobs',
+  )
 
   return {
     id: requireString(value.id, filename, 'workspaces[].id'),
@@ -128,5 +135,6 @@ export function normalizeIndex(value: unknown, filename: string): PersistedIndex
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : 0,
     activeWorkspaceId,
     workspaces,
+    orphanedBlobs: normalizeOrphanedBlobs(value.orphanedBlobs, filename, 'orphanedBlobs'),
   }
 }

@@ -1,4 +1,4 @@
-import { notImplemented, WorkspacePersistenceError } from './errors.ts'
+import { WorkspacePersistenceError } from './errors.ts'
 import {
   createEmptyIndex,
   DEFAULT_ENTRY_PATH,
@@ -277,12 +277,35 @@ export class WorkspaceRepository {
   }
 
   /**
-   * Drops the workspace from `index.json`, then clears its blobs. Blobs that
-   * cannot be cleared stay in `orphanedBlobs` on a tombstone entry until a
-   * later sweep succeeds.
+   * Drops the workspace from `index.json`, then clears its blobs.
+   *
+   * The index is rewritten first so a crash mid-delete cannot leave an entry
+   * pointing at a cleared blob. Its blobs move to the index-level
+   * `orphanedBlobs` list, which outlives the entry that named them, and any
+   * that resist clearing stay there for a later sweep.
    */
   deleteWorkspace(workspaceId: string): Promise<void> {
-    throw notImplemented('WorkspaceRepository.deleteWorkspace', { workspaceId })
+    return this.#enqueue(async () => {
+      const index = await this.#requireIndex()
+      console.log('REPO delete:enter')
+      const entry = this.#requireEntry(index, workspaceId)
+
+      index.orphanedBlobs = [
+        ...(index.orphanedBlobs ?? []),
+        ...entry.files.map(file => file.blob),
+        ...(entry.orphanedBlobs ?? []),
+      ]
+      index.workspaces = index.workspaces.filter(candidate => candidate.id !== workspaceId)
+      if (index.activeWorkspaceId === workspaceId) index.activeWorkspaceId = null
+      console.log('REPO delete:orphans', index.orphanedBlobs.length)
+      await this.#writeIndex(index)
+      console.log('REPO delete:index-written')
+
+      const cleared = await this.#clearOrphanedBlobs(index)
+      console.log('REPO delete:cleared', cleared)
+      if (cleared) await this.#writeIndex(index)
+      console.log('REPO delete:exit')
+    })
   }
 
   /**
@@ -293,12 +316,12 @@ export class WorkspaceRepository {
   sweepOrphanedBlobs(workspaceId?: string): Promise<number> {
     return this.#enqueue(async () => {
       const index = await this.#requireIndex()
-      const entries = workspaceId === undefined
-        ? index.workspaces
+      const holders = workspaceId === undefined
+        ? [index, ...index.workspaces]
         : [this.#requireEntry(index, workspaceId)]
 
       let cleared = 0
-      for (const entry of entries) cleared += await this.#clearOrphanedBlobs(entry)
+      for (const holder of holders) cleared += await this.#clearOrphanedBlobs(holder)
       if (cleared) await this.#writeIndex(index)
       return cleared
     })
@@ -309,7 +332,12 @@ export class WorkspaceRepository {
    * succeeded or failed, so one failed save cannot wedge the queue.
    */
   #enqueue<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
+    const label = new Error().stack?.split(String.fromCharCode(10))[2]?.trim().slice(0, 60)
     const result = this.#queue.then(operation, operation)
+    void result.then(
+      () => console.log('QUEUE settled', label),
+      error => console.log('QUEUE rejected', label, error),
+    )
     this.#queue = result.then(
       () => undefined,
       () => undefined,
@@ -443,10 +471,15 @@ export class WorkspaceRepository {
     }
   }
 
-  async #clearOrphanedBlobs(entry: PersistedWorkspaceEntry) {
+  /**
+   * Clears the blobs an index or a workspace entry has orphaned. Both carry an
+   * `orphanedBlobs` list: an entry collects files deleted from a live
+   * workspace, the index collects everything a deleted workspace left behind.
+   */
+  async #clearOrphanedBlobs(holder: { orphanedBlobs?: string[] }) {
     const remaining: string[] = []
     let cleared = 0
-    for (const blob of entry.orphanedBlobs ?? []) {
+    for (const blob of holder.orphanedBlobs ?? []) {
       try {
         await this.#store.write(blob, '')
         cleared += 1
@@ -456,7 +489,7 @@ export class WorkspaceRepository {
         remaining.push(blob)
       }
     }
-    entry.orphanedBlobs = remaining
+    holder.orphanedBlobs = remaining
     return cleared
   }
 }

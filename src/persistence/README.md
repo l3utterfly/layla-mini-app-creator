@@ -4,14 +4,15 @@
 thing that makes those files outlive a page load, and the only thing that talks
 to the host file APIs.
 
-Creating, restoring, saving, renaming, and switching between workspaces are
-implemented and wired into the app. `deleteWorkspace` is still a seam: it throws
-`WorkspacePersistenceError` with code `NOT_IMPLEMENTED`, and no UI calls it yet.
+Every operation is implemented and wired into the app: create, restore, save,
+rename, switch, and delete.
 
 Workspace names live only in `index.json`, so a rename rewrites the index and
 never touches a blob. Switching workspaces flushes the outgoing workspace before
 hydrating the incoming one, and re-seeds the same derived `.agent` files that
-startup used.
+startup used. Deleting removes the entry first and clears its blobs afterwards,
+then always leaves the app on a freshly scaffolded workspace so the UI never has
+to render an empty state.
 
 ## What the host gives us
 
@@ -31,7 +32,9 @@ transaction. Four consequences shape the whole design:
 - **Host filenames are flat.** Paths never appear in a filename; they live in
   the index and map to opaque blob ids.
 - **Delete is an overwrite.** Removing a file clears its blob to empty content
-  and records it in `orphanedBlobs` until that write succeeds.
+  and records it in `orphanedBlobs` until that write succeeds. A workspace entry
+  tracks the blobs its own files orphaned; the index tracks what a deleted
+  workspace left behind, since those outlive the entry that named them.
 - **Atomic swap is a copy.** The previous index is copied to
   `index.backup.json` before each rewrite, and readers fall back to it when the
   primary index will not parse.
