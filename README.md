@@ -16,7 +16,7 @@ The product is intentionally narrower than a general coding agent. Its most impo
 - The app is self-contained and has no required backend service.
 - Layla is the LLM host. Calls use the OpenAI-shaped chat-completions interface exposed through `@layla-network/sdk` and the Layla WebView bridge.
 - The UI supports multiple workspaces. Each workspace represents one mini-app/site and owns its files, sessions, summaries, snapshots, and preview state.
-- Project data is stored in IndexedDB. `localStorage` is reserved for tiny UI preferences.
+- Workspace files are persisted through the Layla host file APIs (`layla.utils.saveFile`/`readFile`): an `index.json` registry plus one host file per workspace file. `localStorage` is reserved for tiny UI preferences.
 - Preview runs in an iframe generated from the active workspace.
 - The iframe is an isolation and rendering boundary, not a strong security boundary. Projects are assumed to be controlled by the user.
 - The model never receives the entire project by default. It receives a manifest and project summary, then reads exact files on demand.
@@ -121,6 +121,29 @@ Agent-created and agent-updated files live in `VirtualWorkspace`, an isolated in
 Workspace UI operations include create, rename, duplicate, import, export, and delete. Deletion requires direct user confirmation and is not an LLM tool. Switching workspaces cancels or finishes the current run before rebinding the agent.
 
 Each workspace starts with a valid minimal Layla mini-app, including `app.json` and `index.html`. Import validates archive layout and normalizes paths. Export validates required files and produces a flat-root package.
+
+## Workspace persistence
+
+Workspaces survive restarts through the Layla host's private file directory,
+reached with `layla.utils.saveFile` and `layla.utils.readFile`. That surface has
+no list, delete, rename, or transaction call, so `index.json` acts as the
+directory: it lists every workspace, its metadata, and a table mapping each
+workspace-relative path to a flat blob filename that holds its content.
+
+- Saves write blobs first and the index last, so an interrupted save leaves an
+  unreferenced blob rather than a dangling reference.
+- Deletes rewrite the index first and clear the blob afterwards, recording any
+  blob that could not be cleared for a later sweep.
+- Each index rewrite copies the previous index to `index.backup.json`, which is
+  the closest thing available to an atomic swap.
+- Only changed paths are written. `VirtualWorkspace` reports `changedPaths` per
+  commit and stamps a content revision on each file, so autosave writes just the
+  blobs whose revision moved.
+- `.agent/` skill files are never persisted. They are re-seeded from bundled
+  assets on load, exactly as they are excluded from exports.
+
+See `src/persistence/README.md` for the on-host layout, module boundaries, and
+failure behaviour.
 
 ## Phone-first UI
 
@@ -443,7 +466,7 @@ The agent controller emits typed in-process events such as `run.updated`, `messa
 
 ## Suggested implementation order
 
-1. Workspace repository, file revisions, IndexedDB migrations, import/export, and snapshots.
+1. Workspace repository, file revisions, index migrations, import/export, and snapshots.
 2. Preview compiler and iframe diagnostics bridge.
 3. Structured sessions/messages and the in-process event bus.
 4. Tool registry plus deterministic file/preview handlers.
@@ -463,7 +486,7 @@ The harness needs more than UI tests because its critical behavior is prompt and
 - Contract-test every tool schema against valid, invalid, stale, and traversal inputs.
 - Replay recorded model outputs, including malformed envelopes and repeated calls.
 - Test streaming cancellation before, during, and after a tool envelope.
-- Test every mutation's Undo path and IndexedDB transaction rollback.
+- Test every mutation's Undo path, and that an interrupted save never leaves `index.json` pointing at a blob that was not written.
 - Test preview compilation for local CSS, JavaScript, images, missing assets, and runtime errors.
 - Test workspace switching never leaks files or conversation context.
 - Run model-level evaluation prompts across the intended inference engines: create, restyle, debug, multi-file edit, and recover from a stale revision.

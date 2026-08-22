@@ -6,15 +6,19 @@ import { MobileNav } from './components/layout/MobileNav'
 import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
 import { executeToolCall } from './tools/runtime'
-import { createVirtualWorkspace } from './workspace'
 import { layla } from './lib/layla'
+import { attachWorkspaceAutosave } from './persistence'
 import { saveWorkspaceZip } from './workspace/exportWorkspace'
+import type { WorkspaceRepository } from './persistence'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
 import type { ConversationMessage, RunState, Tab } from './types/ui'
-import type { VirtualWorkspaceFileInput } from './workspace'
+import type { VirtualWorkspace } from './workspace'
 
 type AppProps = {
-  initialWorkspaceFiles: VirtualWorkspaceFileInput[]
+  repository: WorkspaceRepository
+  workspaceId: string
+  workspaceName: string
+  virtualWorkspace: VirtualWorkspace
 }
 
 type ImageAssetKind = 'icon' | 'background'
@@ -56,21 +60,42 @@ function readFileAsDataUrl(file: File) {
   })
 }
 
-function App({ initialWorkspaceFiles }: AppProps) {
+function App({ repository, workspaceId, workspaceName, virtualWorkspace }: AppProps) {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
-  const workspace = 'New workspace'
+  const workspace = workspaceName
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [virtualWorkspace] = useState(() => createVirtualWorkspace(initialWorkspaceFiles))
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(
     () => virtualWorkspace.subscribe(snapshot => setFiles(snapshot.files)),
     [virtualWorkspace],
   )
+
+  // Every workspace mutation is written back to the Layla host. Backgrounding
+  // the WebView can suspend timers, so a pending save is forced out as soon as
+  // the page is hidden rather than waiting for the debounce.
+  useEffect(() => {
+    const { autosave, stop } = attachWorkspaceAutosave(repository, workspaceId, virtualWorkspace, {
+      onStateChange: state => {
+        setSaveError(state.status === 'error' ? state.error?.message ?? 'Unable to save.' : null)
+      },
+    })
+
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') void autosave.flush().catch(() => undefined)
+    }
+
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    return () => {
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+      stop()
+    }
+  }, [repository, workspaceId, virtualWorkspace])
 
   const selectTab = (tab: Tab) => {
     setActiveTab(tab)
@@ -167,6 +192,8 @@ function App({ initialWorkspaceFiles }: AppProps) {
           onExport={exportWorkspace}
         />
       </main>
+
+      {saveError && <p className="save-alert" role="alert">Not saved to Layla: {saveError}</p>}
 
       <MobileNav activeTab={activeTab} runState={runState} onSelect={selectTab} />
       {debugOpen && <DebugPanel messages={messages} onClose={() => setDebugOpen(false)} />}

@@ -2,15 +2,23 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { loadInitialWorkspaceFiles } from './data/initializeWorkspace.ts'
+import { bootstrapWorkspace } from './data/bootstrapWorkspace.ts'
+import { layla } from './lib/layla.ts'
+import { createLaylaHostFileStore, createWorkspaceRepository } from './persistence/index.ts'
 
 const root = createRoot(document.getElementById('root')!)
+const repository = createWorkspaceRepository(createLaylaHostFileStore(layla.utils))
 
-void loadInitialWorkspaceFiles()
-  .then(initialWorkspaceFiles => {
+void bootstrapWorkspace(repository)
+  .then(({ workspace, workspaceId, workspaceName }) => {
     root.render(
       <StrictMode>
-        <App initialWorkspaceFiles={initialWorkspaceFiles} />
+        <App
+          repository={repository}
+          workspaceId={workspaceId}
+          workspaceName={workspaceName}
+          virtualWorkspace={workspace}
+        />
       </StrictMode>,
     )
   })

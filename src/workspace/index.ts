@@ -3,7 +3,7 @@ export {
   normalizeWorkspacePath,
   VirtualWorkspace,
   VirtualWorkspaceError,
-} from './VirtualWorkspace'
+} from './VirtualWorkspace.ts'
 
 export type {
   ExactTextReplacement,
