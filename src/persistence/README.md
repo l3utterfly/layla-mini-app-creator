@@ -4,10 +4,12 @@
 thing that makes those files outlive a page load, and the only thing that talks
 to the host file APIs.
 
-Creating, restoring, and saving are implemented and wired into app startup.
-`renameWorkspace` and `deleteWorkspace` are still seams: they throw
-`WorkspacePersistenceError` with code `NOT_IMPLEMENTED`, and no UI calls them
-yet.
+Creating, restoring, saving, and renaming are implemented and wired into the
+app. `deleteWorkspace` is still a seam: it throws `WorkspacePersistenceError`
+with code `NOT_IMPLEMENTED`, and no UI calls it yet.
+
+Workspace names live only in `index.json`, so a rename rewrites the index and
+never touches a blob.
 
 ## What the host gives us
 
