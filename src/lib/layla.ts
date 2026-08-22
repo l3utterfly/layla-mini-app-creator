@@ -164,7 +164,14 @@ function forwardMockCancellationToFetch() {
   }
 }
 
-if (import.meta.env.DEV) {
+// A real Layla host injects `window.ReactNativeWebView` before this module runs.
+// When it is present, every SDK message must pass through to the host so the
+// preview receives real data. Only install the mock when no host is available
+// (e.g. running in a plain browser); otherwise the mock would overwrite the
+// real bridge and the preview would keep showing mock data even inside Layla.
+const hasLaylaHost = typeof window !== 'undefined' && !!window.ReactNativeWebView
+
+if (import.meta.env.DEV && !hasLaylaHost) {
   installLaylaMock({
     debug: true,
     inferenceEngines: [`llama-server:${llamaModel}`],
