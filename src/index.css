@@ -47,3 +47,6 @@
 .rename-actions button{padding:9px 15px;border:1px solid var(--border);border-radius:var(--radius-pill);background:transparent;color:var(--text-secondary);font-size:12px;font-weight:700;cursor:pointer}
 .rename-actions button.primary{border-color:transparent;background:var(--primary);color:#08121d}
 .rename-actions button:disabled{opacity:.55;cursor:default}
+.workspace-menu>button:disabled{opacity:.45;cursor:default}
+.workspace-menu>button:disabled:hover{background:transparent}
+.workspace-menu-hint{margin:6px 10px 3px;color:var(--muted);font-size:10px;line-height:1.4;text-transform:none;letter-spacing:0;font-weight:500}

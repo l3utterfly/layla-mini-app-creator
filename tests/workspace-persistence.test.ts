@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { nextWorkspaceName } from '../src/data/bootstrapWorkspace.ts'
 import { attachWorkspaceAutosave } from '../src/persistence/WorkspaceAutosave.ts'
 import { createWorkspaceRepository } from '../src/persistence/WorkspaceRepository.ts'
 import { WorkspacePersistenceError } from '../src/persistence/errors.ts'
@@ -168,6 +169,43 @@ test('a blob that cannot be cleared stays listed for a later sweep', async () =>
   tracking.failWrites.clear()
   assert.equal(await repository.sweepOrphanedBlobs(summary.id), 1)
   assert.deepEqual(readIndex(tracking).workspaces[0]!.orphanedBlobs, [])
+})
+
+test('a second workspace is isolated from the first and becomes active', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+
+  const first = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  const firstWorkspace = await repository.hydrateWorkspace(first.id)
+  firstWorkspace.writeFile('index.html', '<h1>Sunny</h1>')
+  await repository.saveChangedFiles(first.id, firstWorkspace.snapshot(), ['index.html'])
+
+  const second = await repository.createWorkspace({
+    name: nextWorkspaceName([first.name]),
+    files: [{ name: 'index.html', content: '<h1>Second</h1>' }],
+  })
+
+  assert.equal(second.name, 'New workspace')
+  const index = readIndex(tracking)
+  assert.equal(index.activeWorkspaceId, second.id)
+  assert.deepEqual(index.workspaces.map(entry => entry.name), ['Weather', 'New workspace'])
+
+  // Blobs are scoped per workspace, so neither can read or overwrite the other.
+  const blobs = index.workspaces.flatMap(entry => entry.files.map(file => file.blob))
+  assert.equal(new Set(blobs).size, blobs.length)
+
+  const reopened = createWorkspaceRepository(tracking.store)
+  assert.equal((await reopened.hydrateWorkspace(first.id)).readFile('index.html').content, '<h1>Sunny</h1>')
+  assert.equal((await reopened.hydrateWorkspace(second.id)).readFile('index.html').content, '<h1>Second</h1>')
+  assert.equal(await reopened.getActiveWorkspaceId(), second.id)
+})
+
+test('new workspace names avoid colliding with existing ones', () => {
+  assert.equal(nextWorkspaceName([]), 'New workspace')
+  assert.equal(nextWorkspaceName(['Weather']), 'New workspace')
+  assert.equal(nextWorkspaceName(['New workspace']), 'New workspace 2')
+  assert.equal(nextWorkspaceName(['New workspace', ' New workspace 2 ']), 'New workspace 3')
+  assert.equal(nextWorkspaceName(['New workspace', 'New workspace 3']), 'New workspace 2')
 })
 
 test('renaming updates the index without touching any blob', async () => {

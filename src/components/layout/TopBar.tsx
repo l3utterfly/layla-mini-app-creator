@@ -1,4 +1,4 @@
-import type { Tab } from '../../types/ui'
+import type { Tab, WorkspaceMenuEntry } from '../../types/ui'
 import { Icon } from '../common/Icon'
 
 type TopBarProps = {
@@ -6,8 +6,14 @@ type TopBarProps = {
   workspace: string
   workspaceMenuOpen: boolean
   optionsMenuOpen: boolean
+  workspaces: WorkspaceMenuEntry[]
+  activeWorkspaceId: string
+  /** Blocks workspace changes while a save, a switch, or an agent run is in flight. */
+  busy: boolean
   onToggleWorkspaceMenu: () => void
   onToggleOptionsMenu: () => void
+  onCreateWorkspace: () => void
+  onSelectWorkspace: (workspaceId: string) => void
   onRenameWorkspace: () => void
   onToggleFiles: () => void
   onOpenDebug: () => void
@@ -19,13 +25,24 @@ export function TopBar({
   workspace,
   workspaceMenuOpen,
   optionsMenuOpen,
+  workspaces,
+  activeWorkspaceId,
+  busy,
   onToggleWorkspaceMenu,
   onToggleOptionsMenu,
+  onCreateWorkspace,
+  onSelectWorkspace,
   onRenameWorkspace,
   onToggleFiles,
   onOpenDebug,
   debugCount,
 }: TopBarProps) {
+  // The list is read when the menu opens; this keeps the menu from ever
+  // rendering empty if that read has not landed or failed.
+  const entries = workspaces.length
+    ? workspaces
+    : [{ id: activeWorkspaceId, name: workspace, subtitle: 'Edited just now' }]
+
   return (
     <header className="topbar">
       <button className="workspace-trigger" onClick={onToggleWorkspaceMenu} aria-expanded={workspaceMenuOpen} aria-label="Switch workspace">
@@ -48,16 +65,25 @@ export function TopBar({
 
       {workspaceMenuOpen && (
         <div className="workspace-menu">
-          <button type="button">
+          <button type="button" onClick={onCreateWorkspace} disabled={busy}>
             <span className="workspace-icon"><Icon name="plus" size={16} /></span>
             <span><strong>New workspace</strong></span>
           </button>
           <p>Your workspaces</p>
-          <button className="active" onClick={onToggleWorkspaceMenu}>
-            <span className="workspace-icon">{workspace[0]}</span>
-            <span><strong>{workspace}</strong><small>Edited just now</small></span>
-            <Icon name="check" size={16} />
-          </button>
+          {entries.map(entry => (
+            <button
+              key={entry.id}
+              type="button"
+              className={entry.id === activeWorkspaceId ? 'active' : undefined}
+              disabled={busy && entry.id !== activeWorkspaceId}
+              onClick={() => onSelectWorkspace(entry.id)}
+            >
+              <span className="workspace-icon">{entry.name[0]?.toUpperCase() ?? '?'}</span>
+              <span><strong>{entry.name}</strong><small>{entry.subtitle}</small></span>
+              {entry.id === activeWorkspaceId && <Icon name="check" size={16} />}
+            </button>
+          ))}
+          {busy && <p className="workspace-menu-hint">Finish the current run before switching.</p>}
         </div>
       )}
 

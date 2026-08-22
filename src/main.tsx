@@ -10,7 +10,7 @@ const root = createRoot(document.getElementById('root')!)
 const repository = createWorkspaceRepository(createLaylaHostFileStore(layla.utils))
 
 void bootstrapWorkspace(repository)
-  .then(({ workspace, workspaceId, workspaceName }) => {
+  .then(({ workspace, workspaceId, workspaceName, derivedFiles }) => {
     root.render(
       <StrictMode>
         <App
@@ -18,6 +18,7 @@ void bootstrapWorkspace(repository)
           workspaceId={workspaceId}
           workspaceName={workspaceName}
           virtualWorkspace={workspace}
+          derivedFiles={derivedFiles}
         />
       </StrictMode>,
     )

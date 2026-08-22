@@ -7,6 +7,13 @@ export type RunState = 'ready' | 'thinking' | 'complete' | 'cancelled' | 'error'
 
 export type WorkspaceFile = VirtualWorkspaceFile
 
+/** One row of the workspace switcher, formatted for display. */
+export type WorkspaceMenuEntry = {
+  id: string
+  name: string
+  subtitle: string
+}
+
 export type ConversationMessage = {
   id: string
   role: 'user' | 'assistant'

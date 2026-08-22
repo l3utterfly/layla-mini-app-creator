@@ -4,12 +4,14 @@
 thing that makes those files outlive a page load, and the only thing that talks
 to the host file APIs.
 
-Creating, restoring, saving, and renaming are implemented and wired into the
-app. `deleteWorkspace` is still a seam: it throws `WorkspacePersistenceError`
-with code `NOT_IMPLEMENTED`, and no UI calls it yet.
+Creating, restoring, saving, renaming, and switching between workspaces are
+implemented and wired into the app. `deleteWorkspace` is still a seam: it throws
+`WorkspacePersistenceError` with code `NOT_IMPLEMENTED`, and no UI calls it yet.
 
 Workspace names live only in `index.json`, so a rename rewrites the index and
-never touches a blob.
+never touches a blob. Switching workspaces flushes the outgoing workspace before
+hydrating the incoming one, and re-seeds the same derived `.agent` files that
+startup used.
 
 ## What the host gives us
 

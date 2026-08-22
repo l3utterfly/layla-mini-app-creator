@@ -2,7 +2,7 @@ import { loadLaylaSdkSkillFiles } from './initializeWorkspace.ts'
 import { scaffoldWorkspaceFiles } from './scaffoldWorkspace.ts'
 import { toWorkspaceSummary } from '../persistence/index.ts'
 import type { WorkspaceRepository, WorkspaceSummary } from '../persistence/index.ts'
-import type { VirtualWorkspace } from '../workspace/index.ts'
+import type { VirtualWorkspace, VirtualWorkspaceFileInput } from '../workspace/index.ts'
 
 export const DEFAULT_WORKSPACE_NAME = 'New workspace'
 
@@ -10,6 +10,24 @@ export type WorkspaceBootstrap = {
   workspaceId: string
   workspaceName: string
   workspace: VirtualWorkspace
+  /**
+   * The `.agent` skill files this build ships. They are kept so switching
+   * workspaces can re-seed them without fetching the assets again.
+   */
+  derivedFiles: VirtualWorkspaceFileInput[]
+}
+
+/**
+ * Picks a name for a new workspace that does not collide with an existing one:
+ * `New workspace`, then `New workspace 2`, `New workspace 3`, and so on.
+ */
+export function nextWorkspaceName(existingNames: string[]) {
+  const taken = new Set(existingNames.map(name => name.trim()))
+  if (!taken.has(DEFAULT_WORKSPACE_NAME)) return DEFAULT_WORKSPACE_NAME
+
+  let suffix = 2
+  while (taken.has(`${DEFAULT_WORKSPACE_NAME} ${suffix}`)) suffix += 1
+  return `${DEFAULT_WORKSPACE_NAME} ${suffix}`
 }
 
 /**
@@ -47,5 +65,6 @@ export async function bootstrapWorkspace(
     workspaceId: summary.id,
     workspaceName: summary.name,
     workspace: await repository.hydrateWorkspace(summary.id, { derivedFiles }),
+    derivedFiles,
   }
 }
