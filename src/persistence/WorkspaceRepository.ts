@@ -249,8 +249,31 @@ export class WorkspaceRepository {
     })
   }
 
+  /**
+   * Names live only in `index.json`, so a rename never touches a blob. An
+   * empty or whitespace-only name is rejected rather than silently replaced,
+   * because it always means the caller did not validate its input.
+   */
   renameWorkspace(workspaceId: string, name: string): Promise<WorkspaceSummary> {
-    throw notImplemented('WorkspaceRepository.renameWorkspace', { workspaceId, name })
+    return this.#enqueue(async () => {
+      const trimmed = name.trim()
+      if (!trimmed) {
+        throw new WorkspacePersistenceError(
+          'INVALID_NAME',
+          'A workspace name cannot be empty.',
+          { workspaceId },
+        )
+      }
+
+      const index = await this.#requireIndex()
+      const entry = this.#requireEntry(index, workspaceId)
+      if (entry.name === trimmed) return toWorkspaceSummary(entry)
+
+      entry.name = trimmed
+      entry.updatedAt = this.#clock()
+      await this.#writeIndex(index)
+      return toWorkspaceSummary(entry)
+    })
   }
 
   /**

@@ -5,7 +5,10 @@ type TopBarProps = {
   activeTab: Tab
   workspace: string
   workspaceMenuOpen: boolean
+  optionsMenuOpen: boolean
   onToggleWorkspaceMenu: () => void
+  onToggleOptionsMenu: () => void
+  onRenameWorkspace: () => void
   onToggleFiles: () => void
   onOpenDebug: () => void
   debugCount: number
@@ -15,7 +18,10 @@ export function TopBar({
   activeTab,
   workspace,
   workspaceMenuOpen,
+  optionsMenuOpen,
   onToggleWorkspaceMenu,
+  onToggleOptionsMenu,
+  onRenameWorkspace,
   onToggleFiles,
   onOpenDebug,
   debugCount,
@@ -35,7 +41,9 @@ export function TopBar({
         <button className="icon-button desktop-files-button" aria-label={activeTab === 'files' ? 'Close files' : 'Open files'} onClick={onToggleFiles}>
           <Icon name="folder" />
         </button>
-        <button className="icon-button" aria-label="More workspace options"><Icon name="more" /></button>
+        <button className="icon-button" aria-label="More workspace options" aria-expanded={optionsMenuOpen} onClick={onToggleOptionsMenu}>
+          <Icon name="more" />
+        </button>
       </div>
 
       {workspaceMenuOpen && (
@@ -49,6 +57,15 @@ export function TopBar({
             <span className="workspace-icon">{workspace[0]}</span>
             <span><strong>{workspace}</strong><small>Edited just now</small></span>
             <Icon name="check" size={16} />
+          </button>
+        </div>
+      )}
+
+      {optionsMenuOpen && (
+        <div className="workspace-menu options-menu" role="menu">
+          <button type="button" role="menuitem" onClick={onRenameWorkspace}>
+            <span className="workspace-icon"><Icon name="pencil" size={15} /></span>
+            <span><strong>Rename workspace</strong></span>
           </button>
         </div>
       )}

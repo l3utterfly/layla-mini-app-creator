@@ -7,6 +7,7 @@ export type WorkspacePersistenceErrorCode =
   | 'INDEX_VERSION_UNSUPPORTED'
   | 'WORKSPACE_NOT_FOUND'
   | 'WORKSPACE_EXISTS'
+  | 'INVALID_NAME'
   | 'BLOB_MISSING'
 
 export class WorkspacePersistenceError extends Error {

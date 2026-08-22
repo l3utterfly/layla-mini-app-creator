@@ -170,6 +170,47 @@ test('a blob that cannot be cleared stays listed for a later sweep', async () =>
   assert.deepEqual(readIndex(tracking).workspaces[0]!.orphanedBlobs, [])
 })
 
+test('renaming updates the index without touching any blob', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const summary = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  const blobs = readIndex(tracking).workspaces[0]!.files.map(file => file.blob)
+
+  tracking.writes.length = 0
+  const renamed = await repository.renameWorkspace(summary.id, '  Weather Now  ')
+
+  assert.equal(renamed.name, 'Weather Now')
+  assert.deepEqual(tracking.writes, [INDEX_BACKUP_FILE_NAME, INDEX_FILE_NAME])
+
+  const entry = readIndex(tracking).workspaces[0]!
+  assert.equal(entry.name, 'Weather Now')
+  assert.deepEqual(entry.files.map(file => file.blob), blobs)
+
+  // A no-op rename does not rewrite anything.
+  tracking.writes.length = 0
+  await repository.renameWorkspace(summary.id, 'Weather Now')
+  assert.deepEqual(tracking.writes, [])
+
+  await assert.rejects(
+    () => repository.renameWorkspace(summary.id, '   '),
+    (error: WorkspacePersistenceError) => error.code === 'INVALID_NAME',
+  )
+  await assert.rejects(
+    () => repository.renameWorkspace('wkmissing', 'Anything'),
+    (error: WorkspacePersistenceError) => error.code === 'WORKSPACE_NOT_FOUND',
+  )
+})
+
+test('a renamed workspace keeps its name across a restart', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const summary = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  await repository.renameWorkspace(summary.id, 'Weather Now')
+
+  const reloaded = await createWorkspaceRepository(tracking.store).listWorkspaces()
+  assert.deepEqual(reloaded.map(entry => entry.name), ['Weather Now'])
+})
+
 test('a corrupt index is recovered from the backup instead of being replaced', async () => {
   const tracking = createTrackingStore()
   const repository = createWorkspaceRepository(tracking.store)

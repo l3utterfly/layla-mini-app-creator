@@ -5,6 +5,7 @@ import { FilesPane } from './components/files/FilesPane'
 import { MobileNav } from './components/layout/MobileNav'
 import { TopBar } from './components/layout/TopBar'
 import { PreviewPane } from './components/preview/PreviewPane'
+import { RenameWorkspaceDialog } from './components/layout/RenameWorkspaceDialog'
 import { executeToolCall } from './tools/runtime'
 import { layla } from './lib/layla'
 import { attachWorkspaceAutosave } from './persistence'
@@ -63,8 +64,10 @@ function readFileAsDataUrl(file: File) {
 function App({ repository, workspaceId, workspaceName, virtualWorkspace }: AppProps) {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
-  const workspace = workspaceName
+  const [workspace, setWorkspace] = useState(workspaceName)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [debugOpen, setDebugOpen] = useState(false)
@@ -100,6 +103,12 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace }: AppPr
   const selectTab = (tab: Tab) => {
     setActiveTab(tab)
     setWorkspaceMenuOpen(false)
+    setOptionsMenuOpen(false)
+  }
+
+  const renameWorkspace = async (name: string) => {
+    const summary = await repository.renameWorkspace(workspaceId, name)
+    setWorkspace(summary.name)
   }
 
   const runTool = async (call: ToolCall): Promise<ToolResultEnvelope> => {
@@ -162,7 +171,19 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace }: AppPr
         activeTab={activeTab}
         workspace={workspace}
         workspaceMenuOpen={workspaceMenuOpen}
-        onToggleWorkspaceMenu={() => setWorkspaceMenuOpen(value => !value)}
+        optionsMenuOpen={optionsMenuOpen}
+        onToggleWorkspaceMenu={() => {
+          setOptionsMenuOpen(false)
+          setWorkspaceMenuOpen(value => !value)
+        }}
+        onToggleOptionsMenu={() => {
+          setWorkspaceMenuOpen(false)
+          setOptionsMenuOpen(value => !value)
+        }}
+        onRenameWorkspace={() => {
+          setOptionsMenuOpen(false)
+          setRenameOpen(true)
+        }}
         onToggleFiles={() => selectTab(activeTab === 'files' ? 'chat' : 'files')}
         onOpenDebug={() => setDebugOpen(true)}
         debugCount={messages.filter(message => message.role === 'assistant' && message.rawOutput).length}
@@ -197,6 +218,13 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace }: AppPr
 
       <MobileNav activeTab={activeTab} runState={runState} onSelect={selectTab} />
       {debugOpen && <DebugPanel messages={messages} onClose={() => setDebugOpen(false)} />}
+      {renameOpen && (
+        <RenameWorkspaceDialog
+          currentName={workspace}
+          onRename={renameWorkspace}
+          onClose={() => setRenameOpen(false)}
+        />
+      )}
     </div>
   )
 }
