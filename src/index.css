@@ -1324,11 +1324,6 @@ textarea:focus-visible {
     border: 1px solid #202024;
   }
 }
-@media (max-width: 400px) {
-  .topbar-actions > .icon-button:not(.desktop-files-button) {
-    display: none;
-  }
-}
 @media (max-width: 360px) {
   .workspace-copy strong {
     max-width: 140px;
