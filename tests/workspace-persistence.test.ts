@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { nextWorkspaceName } from '../src/data/bootstrapWorkspace.ts'
 import { attachWorkspaceAutosave } from '../src/persistence/WorkspaceAutosave.ts'
+import { ChatAutosave } from '../src/persistence/ChatAutosave.ts'
 import { createWorkspaceRepository } from '../src/persistence/WorkspaceRepository.ts'
+import { chatsFileName, createChat } from '../src/persistence/chatDocument.ts'
 import { WorkspacePersistenceError } from '../src/persistence/errors.ts'
 import {
   INDEX_BACKUP_FILE_NAME,
@@ -255,6 +257,73 @@ test('a second workspace is isolated from the first and becomes active', async (
   assert.equal(await reopened.getActiveWorkspaceId(), second.id)
 })
 
+test('chat histories persist in one companion chats.json per workspace', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store, { clock: () => 1_000 })
+  const first = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  const second = await repository.createWorkspace({ name: 'Notes', files: seedFiles })
+
+  const firstChats = await repository.loadChats(first.id)
+  const continued = createChat(2_000)
+  continued.title = 'Add a forecast card'
+  continued.messages = [{
+    id: 'message_1',
+    role: 'user',
+    content: 'Add a forecast card',
+    reasoning: '',
+    rawOutput: 'Add a forecast card',
+    state: 'complete',
+  }]
+  await repository.saveChats(first.id, {
+    ...firstChats,
+    activeChatId: continued.id,
+    chats: [continued, ...firstChats.chats],
+  })
+
+  const reopened = createWorkspaceRepository(tracking.store)
+  const restored = await reopened.loadChats(first.id)
+  assert.equal(restored.activeChatId, continued.id)
+  assert.equal(restored.chats[0]!.messages[0]!.content, 'Add a forecast card')
+  assert.equal((await reopened.loadChats(second.id)).chats.length, 1)
+  assert.ok(tracking.contents.has(chatsFileName(first.id)))
+  assert.ok(tracking.contents.has(chatsFileName(second.id)))
+
+  // The companion document is not visible to the virtual website filesystem.
+  assert.equal((await reopened.hydrateWorkspace(first.id)).hasFile('chats.json'), false)
+})
+
+test('loading chats lazily migrates a workspace created before chats.json existed', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const workspace = await repository.createWorkspace({ name: 'Legacy', files: seedFiles })
+  tracking.contents.delete(chatsFileName(workspace.id))
+
+  const chats = await repository.loadChats(workspace.id)
+  assert.equal(chats.chats.length, 1)
+  assert.equal(chats.activeChatId, chats.chats[0]!.id)
+  assert.ok(tracking.contents.has(chatsFileName(workspace.id)))
+})
+
+test('chat autosave flushes the latest complete chat document', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const workspace = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
+  const chats = await repository.loadChats(workspace.id)
+  const active = chats.chats[0]!
+  const next = {
+    ...chats,
+    chats: [{ ...active, title: 'Timer', updatedAt: 2_000 }, ...chats.chats.slice(1)],
+  }
+  tracking.writes.length = 0
+
+  const autosave = new ChatAutosave(repository, workspace.id, { debounceMs: 60_000 })
+  autosave.update(next)
+  await autosave.flush()
+
+  assert.deepEqual(tracking.writes, [chatsFileName(workspace.id)])
+  assert.equal((await repository.loadChats(workspace.id)).chats[0]!.title, 'Timer')
+})
+
 test('deleting a workspace clears its blobs and leaves the others intact', async () => {
   const tracking = createTrackingStore()
   const repository = createWorkspaceRepository(tracking.store)
@@ -264,6 +333,7 @@ test('deleting a workspace clears its blobs and leaves the others intact', async
   const before = readIndex(tracking)
   const keptBlobs = before.workspaces[0]!.files.map(file => file.blob)
   const doomedBlobs = before.workspaces[1]!.files.map(file => file.blob)
+  const doomedChats = chatsFileName(doomed.id)
 
   await repository.deleteWorkspace(doomed.id)
 
@@ -274,6 +344,7 @@ test('deleting a workspace clears its blobs and leaves the others intact', async
   assert.deepEqual(index.orphanedBlobs, [])
 
   for (const blob of doomedBlobs) assert.equal(tracking.contents.has(blob), false)
+  assert.equal(tracking.contents.has(doomedChats), false)
   for (const blob of keptBlobs) assert.equal(tracking.contents.has(blob), true)
 
   const reopened = createWorkspaceRepository(tracking.store)

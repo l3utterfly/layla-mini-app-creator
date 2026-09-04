@@ -10,6 +10,7 @@ import type { VirtualWorkspaceFile } from '../workspace/index.ts'
  *
  *   index.json                      registry of every workspace and its files
  *   index.backup.json               previous index, kept for recovery
+ *   workspaces/<workspaceId>/chats.json
  *   workspaces/<workspaceId>/<blobId>.blob
  */
 export const INDEX_FILE_NAME = 'index.json'

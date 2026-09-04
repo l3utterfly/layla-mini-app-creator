@@ -1,7 +1,7 @@
 import { loadLaylaSdkSkillFiles } from './initializeWorkspace.ts'
 import { scaffoldWorkspaceFiles } from './scaffoldWorkspace.ts'
 import { toWorkspaceSummary } from '../persistence/index.ts'
-import type { WorkspaceRepository, WorkspaceSummary } from '../persistence/index.ts'
+import type { PersistedChats, WorkspaceRepository, WorkspaceSummary } from '../persistence/index.ts'
 import type { VirtualWorkspace, VirtualWorkspaceFileInput } from '../workspace/index.ts'
 
 export const DEFAULT_WORKSPACE_NAME = 'New workspace'
@@ -15,6 +15,7 @@ export type WorkspaceBootstrap = {
    * workspaces can re-seed them without fetching the assets again.
    */
   derivedFiles: VirtualWorkspaceFileInput[]
+  chats: PersistedChats
 }
 
 /**
@@ -61,10 +62,16 @@ export async function bootstrapWorkspace(
     })
   }
 
+  const [workspace, chats] = await Promise.all([
+    repository.hydrateWorkspace(summary.id, { derivedFiles }),
+    repository.loadChats(summary.id),
+  ])
+
   return {
     workspaceId: summary.id,
     workspaceName: summary.name,
-    workspace: await repository.hydrateWorkspace(summary.id, { derivedFiles }),
+    workspace,
     derivedFiles,
+    chats,
   }
 }

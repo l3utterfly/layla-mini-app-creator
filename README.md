@@ -59,11 +59,14 @@ The creator's own distributable artifact must follow Layla packaging rules. A pa
 
 ### Local inference development
 
-Browser development installs the `@layla-network/sdk` mock before creating the shared SDK client. The mock forwards chat completions through Vite's `/llama` proxy to a local OpenAI-compatible `llama-server`.
+Browser development installs the `@layla-network/sdk` mock before creating the shared SDK client. The mock forwards chat completions through Vite's `/ninfer` proxy to a local OpenAI-compatible `ninfer-serve` instance running in WSL.
 
-1. Start `llama-server` on port 8080 (or copy `.env.example` to `.env.local` and change `LLAMA_SERVER_URL`).
-2. If the server runs in router mode, set `VITE_LLAMA_MODEL` to the loaded model ID or its `--alias` value.
-3. Run `npm run dev` and send a chat message.
+1. Start `ninfer-serve` on port 18080 (or copy `.env.example` to `.env.local` and change `NINFER_SERVER_URL`). WSL's localhost forwarding makes the default `http://127.0.0.1:18080` reachable from Vite on Windows.
+2. Set `VITE_NINFER_MODEL` to the model ID returned by `GET /v1/models`; the default is `qwen3.8-27b`.
+3. The mock explicitly requests up to 131,072 generated tokens. Override `VITE_NINFER_MAX_TOKENS` when the server uses a smaller context window; prompt tokens plus this output budget must fit within `ninfer-serve --max-context`.
+4. Run `npm run dev` and send a chat message.
+
+`ninfer-serve` otherwise defaults requests that omit `max_tokens` to 8,192 generated tokens. The creator now sends the limit explicitly, so it does not depend on that server default. For other clients that omit the field, add `--default-max-tokens 131072` to the server command. There is always a finite limit: generation stops naturally first, at the requested output budget, or when the model context is exhausted.
 
 Production builds do not install the mock; the same `LaylaSDK` client uses the Layla WebView bridge instead.
 

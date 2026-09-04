@@ -1,5 +1,10 @@
 import { WorkspacePersistenceError } from './errors.ts'
 import {
+  chatsFileName,
+  createEmptyChats,
+  normalizeChats,
+} from './chatDocument.ts'
+import {
   createEmptyIndex,
   DEFAULT_ENTRY_PATH,
   normalizeIndex,
@@ -17,6 +22,7 @@ import {
 } from './layout.ts'
 import { createVirtualWorkspace, VirtualWorkspace } from '../workspace/index.ts'
 import type { HostFileStore } from './hostFileStore.ts'
+import type { PersistedChats } from './chatDocument.ts'
 import type {
   PersistedFileEntry,
   PersistedIndex,
@@ -150,6 +156,10 @@ export class WorkspaceRepository {
         files.push(toFileEntry(file, blob))
       }
 
+      // Conversation state is a companion file, not a virtual workspace file,
+      // so it can never leak into the website ZIP.
+      await writeJsonFile(this.#store, chatsFileName(id), createEmptyChats(now))
+
       const entry: PersistedWorkspaceEntry = {
         id,
         name: options.name.trim() || 'Untitled workspace',
@@ -217,6 +227,42 @@ export class WorkspaceRepository {
     })
   }
 
+  /** Loads this workspace's chat sessions, creating the companion file for legacy workspaces. */
+  loadChats(workspaceId: string): Promise<PersistedChats> {
+    return this.#enqueue(async () => {
+      const index = await this.#requireIndex()
+      this.#requireEntry(index, workspaceId)
+      const filename = chatsFileName(workspaceId)
+      const raw = await this.#store.read(filename)
+      if (raw === null) {
+        const chats = createEmptyChats(this.#clock())
+        await writeJsonFile(this.#store, filename, chats)
+        return chats
+      }
+
+      try {
+        return normalizeChats(JSON.parse(raw), filename)
+      } catch (error) {
+        if (error instanceof WorkspacePersistenceError) throw error
+        throw new WorkspacePersistenceError(
+          'CHATS_CORRUPT',
+          `${filename} does not contain valid JSON.`,
+          { filename },
+        )
+      }
+    })
+  }
+
+  /** Replaces one workspace's complete chat document without touching its website files. */
+  saveChats(workspaceId: string, chats: PersistedChats): Promise<void> {
+    return this.#enqueue(async () => {
+      const index = await this.#requireIndex()
+      this.#requireEntry(index, workspaceId)
+      const filename = chatsFileName(workspaceId)
+      await writeJsonFile(this.#store, filename, normalizeChats(chats, filename))
+    })
+  }
+
   /**
    * Persists only the paths that changed, using the per-file revisions already
    * recorded in the index to skip untouched files. This is the hot path driven
@@ -277,12 +323,12 @@ export class WorkspaceRepository {
   }
 
   /**
-   * Drops the workspace from `index.json`, then clears its blobs.
+   * Drops the workspace from `index.json`, then clears its blobs and chats.
    *
    * The index is rewritten first so a crash mid-delete cannot leave an entry
    * pointing at a cleared blob. Its blobs move to the index-level
-   * `orphanedBlobs` list, which outlives the entry that named them, and any
-   * that resist clearing stay there for a later sweep.
+   * legacy-named `orphanedBlobs` list, which outlives the entry that named
+   * them, and any host files that resist clearing stay there for a later sweep.
    */
   deleteWorkspace(workspaceId: string): Promise<void> {
     return this.#enqueue(async () => {
@@ -292,6 +338,7 @@ export class WorkspaceRepository {
       index.orphanedBlobs = [
         ...(index.orphanedBlobs ?? []),
         ...entry.files.map(file => file.blob),
+        chatsFileName(workspaceId),
         ...(entry.orphanedBlobs ?? []),
       ]
       index.workspaces = index.workspaces.filter(candidate => candidate.id !== workspaceId)

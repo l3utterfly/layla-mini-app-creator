@@ -11,6 +11,7 @@ type TopBarProps = {
   /** Blocks workspace changes while a save, a switch, or an agent run is in flight. */
   busy: boolean
   onToggleWorkspaceMenu: () => void
+  onToggleChats: () => void
   onToggleOptionsMenu: () => void
   onCreateWorkspace: () => void
   onSelectWorkspace: (workspaceId: string) => void
@@ -30,6 +31,7 @@ export function TopBar({
   activeWorkspaceId,
   busy,
   onToggleWorkspaceMenu,
+  onToggleChats,
   onToggleOptionsMenu,
   onCreateWorkspace,
   onSelectWorkspace,
@@ -47,11 +49,15 @@ export function TopBar({
 
   return (
     <header className="topbar">
-      <button className="workspace-trigger" onClick={onToggleWorkspaceMenu} aria-expanded={workspaceMenuOpen} aria-label="Switch workspace">
-        <span className="brand-mark"><Icon name="sparkles" size={17} /></span>
-        <span className="workspace-copy"><small>Workspace</small><strong>{workspace}</strong></span>
-        <Icon name="chevron" size={17} />
-      </button>
+      <div className="topbar-start">
+        <button type="button" className="brand-trigger" onClick={onToggleChats} aria-label="Open chats">
+          <span className="brand-mark"><Icon name="sparkles" size={17} /></span>
+        </button>
+        <button className="workspace-trigger" onClick={onToggleWorkspaceMenu} aria-expanded={workspaceMenuOpen} aria-label="Switch workspace">
+          <span className="workspace-copy"><small>Workspace</small><strong>{workspace}</strong></span>
+          <Icon name="chevron" size={17} />
+        </button>
+      </div>
 
       <div className="topbar-actions">
         <button className="debug-button" aria-label="Show raw model outputs" onClick={onOpenDebug}>

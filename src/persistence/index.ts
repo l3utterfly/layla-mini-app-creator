@@ -33,9 +33,20 @@ export {
   WorkspaceAutosave,
   attachWorkspaceAutosave,
 } from './WorkspaceAutosave.ts'
+export { ChatAutosave, DEFAULT_CHAT_AUTOSAVE_DEBOUNCE_MS } from './ChatAutosave.ts'
 export { PERSISTENCE_SCHEMA_VERSION } from './types.ts'
+export {
+  CHAT_SCHEMA_VERSION,
+  DEFAULT_CHAT_TITLE,
+  chatsFileName,
+  createChat,
+  createEmptyChats,
+  normalizeChats,
+  titleFromMessages,
+} from './chatDocument.ts'
 
 export type { WorkspacePersistenceErrorCode } from './errors.ts'
+export type { PersistedChat, PersistedChats } from './chatDocument.ts'
 export type { HostFileStore, LaylaFileApi } from './hostFileStore.ts'
 export type {
   CreateWorkspaceOptions,
@@ -43,6 +54,7 @@ export type {
   WorkspaceRepositoryOptions,
 } from './WorkspaceRepository.ts'
 export type { WorkspaceAutosaveOptions } from './WorkspaceAutosave.ts'
+export type { ChatAutosaveOptions } from './ChatAutosave.ts'
 export type {
   AutosaveState,
   AutosaveStatus,

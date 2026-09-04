@@ -1,8 +1,8 @@
 # Workspace persistence
 
 `VirtualWorkspace` holds every workspace file in memory. This module is the only
-thing that makes those files outlive a page load, and the only thing that talks
-to the host file APIs.
+thing that makes those files and their companion chat histories outlive a page
+load, and the only thing that talks to the host file APIs.
 
 Every operation is implemented and wired into the app: create, restore, save,
 rename, switch, and delete.
@@ -37,9 +37,10 @@ the design:
   Virtual paths still map to opaque blob ids, avoiding host filename restrictions
   and file/directory collisions while keeping rename metadata-only.
 - **Delete is explicit.** Removing a file calls `deleteFileOrDir` and records
-  failures in `orphanedBlobs` for a later sweep. A workspace entry tracks blobs
-  its own files orphaned; the index tracks what a deleted workspace left behind,
-  since those outlive the entry that named them.
+  failures in the legacy-named `orphanedBlobs` list for a later sweep. A
+  workspace entry tracks blobs its own files orphaned; the index tracks every
+  host file a deleted workspace left behind, including `chats.json`, since
+  those outlive the entry that named them.
 - **Atomic swap is a copy.** The previous index is copied to
   `index.backup.json` before each rewrite, and readers fall back to it when the
   primary index will not parse.
@@ -55,8 +56,15 @@ index.json                    every workspace, its metadata, and its file table
 index.backup.json             the previous index, for recovery
 workspaces/
   wk4f2a91c7de/
+    chats.json                  chat sessions for this workspace only
     b3c1e90a.blob             one virtual-workspace file
 ```
+
+`chats.json` is deliberately outside `VirtualWorkspace`. It stores the active
+chat plus each chat's title, timestamps, messages, reasoning, and tool results.
+It is therefore never visible to the coding agent as a website file and never
+included in the exported ZIP. A missing file on an older workspace is created
+lazily with one empty chat.
 
 `index.json`:
 
@@ -118,9 +126,11 @@ same exclusion `exportWorkspace` already applies to ZIPs.
 | `layout.ts` | Host filenames, id generation, the derived-path policy |
 | `codec.ts` | UTF-8 ↔ base64 and data URI prefix handling |
 | `indexDocument.ts` | Parsing and validating `index.json` |
+| `chatDocument.ts` | Parsing, validating, and naming chat sessions |
 | `hostFileStore.ts` | The `HostFileStore` port, its Layla and in-memory adapters |
-| `WorkspaceRepository.ts` | `index.json` plus blob orchestration |
+| `WorkspaceRepository.ts` | `index.json`, chat documents, and blob orchestration |
 | `WorkspaceAutosave.ts` | Workspace change events → debounced writes |
+| `ChatAutosave.ts` | Chat state updates → debounced `chats.json` writes |
 
 `HostFileStore` is the seam. Above it everything is plain text and relative
 host paths; below it lives base64, data URI prefixes, and the bridge. Tests use
@@ -133,15 +143,18 @@ restores the active workspace or scaffolds the first one:
 
 ```ts
 const repository = createWorkspaceRepository(createLaylaHostFileStore(layla.utils))
-const { workspace, workspaceId, workspaceName } = await bootstrapWorkspace(repository)
+const { workspace, workspaceId, workspaceName, chats } = await bootstrapWorkspace(repository)
 ```
 
 `App` then attaches autosave for the life of the workspace:
 
 ```ts
 const { autosave, stop } = attachWorkspaceAutosave(repository, workspaceId, workspace)
+const chatAutosave = new ChatAutosave(repository, workspaceId)
 // ... agent runs and image imports mutate `workspace` ...
+chatAutosave.update(chats)
 await autosave.flush()   // before switching workspaces, exporting, or unloading
+await chatAutosave.flush()
 stop()
 ```
 
@@ -167,7 +180,7 @@ timer rather than starting a second write.
 
 ## Scope
 
-This module persists workspace files only. Conversations, sessions, undo
-snapshots, and project summaries are separate concerns; when they land they
-should get their own top-level host files rather than being folded into
-`index.json`, which is rewritten on every save and should stay small.
+Workspace website files and chat histories have separate documents and save
+loops. Undo snapshots and project summaries remain outside this module;
+additional concerns should not be folded into `index.json`, which is rewritten
+on every workspace save and should stay small.

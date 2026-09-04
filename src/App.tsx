@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import { ChatPane } from './components/chat/ChatPane'
+import { ChatSidebar } from './components/chat/ChatSidebar'
 import { DebugPanel } from './components/debug/DebugPanel'
 import { FilesPane } from './components/files/FilesPane'
 import { MobileNav } from './components/layout/MobileNav'
@@ -11,9 +13,14 @@ import { nextWorkspaceName } from './data/bootstrapWorkspace'
 import { scaffoldWorkspaceFiles } from './data/scaffoldWorkspace'
 import { executeToolCall } from './tools/runtime'
 import { layla } from './lib/layla'
-import { attachWorkspaceAutosave } from './persistence'
+import { ChatAutosave, attachWorkspaceAutosave, createChat, titleFromMessages } from './persistence'
 import { saveWorkspaceZip } from './workspace/exportWorkspace'
-import type { WorkspaceAutosave, WorkspaceRepository, WorkspaceSummary } from './persistence'
+import type {
+  PersistedChats,
+  WorkspaceAutosave,
+  WorkspaceRepository,
+  WorkspaceSummary,
+} from './persistence'
 import type { ToolCall, ToolResultEnvelope } from './tools/types'
 import type { ConversationMessage, RunState, Tab, WorkspaceMenuEntry } from './types/ui'
 import type { VirtualWorkspace, VirtualWorkspaceFileInput } from './workspace'
@@ -24,6 +31,7 @@ type AppProps = {
   workspaceName: string
   virtualWorkspace: VirtualWorkspace
   derivedFiles: VirtualWorkspaceFileInput[]
+  initialChats: PersistedChats
 }
 
 /** The workspace the whole UI is currently bound to. */
@@ -107,7 +115,14 @@ function readFileAsDataUrl(file: File) {
   })
 }
 
-function App({ repository, workspaceId, workspaceName, virtualWorkspace, derivedFiles }: AppProps) {
+function App({
+  repository,
+  workspaceId,
+  workspaceName,
+  virtualWorkspace,
+  derivedFiles,
+  initialChats,
+}: AppProps) {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [runState, setRunState] = useState<RunState>('ready')
   const [session, setSession] = useState<WorkspaceSession>(
@@ -120,16 +135,23 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
+  const [chatDocument, setChatDocument] = useState(initialChats)
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [chatSaveError, setChatSaveError] = useState<string | null>(null)
   const autosaveRef = useRef<WorkspaceAutosave | null>(null)
+  const chatAutosaveRef = useRef<ChatAutosave | null>(null)
+  const chatDocumentRef = useRef(initialChats)
   // React state lags a rapid second click, so the in-flight guard is a ref.
   const changingWorkspaceRef = useRef(false)
 
   const workspace = session.name
   const activeWorkspace = session.workspace
+  const activeChat = chatDocument.chats.find(chat => chat.id === chatDocument.activeChatId)
+    ?? chatDocument.chats[0]!
+  const messages = activeChat.messages
 
   // Resetting during render rather than in an effect avoids showing the
   // previous workspace's files for a frame after a switch.
@@ -156,7 +178,10 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
     autosaveRef.current = autosave
 
     const flushWhenHidden = () => {
-      if (document.visibilityState === 'hidden') void autosave.flush().catch(() => undefined)
+      if (document.visibilityState === 'hidden') {
+        void autosave.flush().catch(() => undefined)
+        void chatAutosaveRef.current?.flush().catch(() => undefined)
+      }
     }
 
     document.addEventListener('visibilitychange', flushWhenHidden)
@@ -167,10 +192,45 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
     }
   }, [repository, session.id, session.workspace])
 
+  useEffect(() => {
+    const autosave = new ChatAutosave(repository, session.id, {
+      onError: error => setChatSaveError(error?.message ?? null),
+    })
+    chatAutosaveRef.current = autosave
+    return () => {
+      chatAutosaveRef.current = null
+      autosave.stop()
+    }
+  }, [repository, session.id])
+
+  const commitChats = (next: PersistedChats) => {
+    chatDocumentRef.current = next
+    setChatDocument(next)
+    chatAutosaveRef.current?.update(next)
+  }
+
+  const updateMessages: Dispatch<SetStateAction<ConversationMessage[]>> = update => {
+    const current = chatDocumentRef.current
+    const chat = current.chats.find(entry => entry.id === current.activeChatId) ?? current.chats[0]!
+    const nextMessages = typeof update === 'function' ? update(chat.messages) : update
+    const now = Date.now()
+    const nextChat = {
+      ...chat,
+      title: titleFromMessages(nextMessages),
+      updatedAt: now,
+      messages: nextMessages,
+    }
+    commitChats({
+      ...current,
+      chats: current.chats.map(entry => entry.id === chat.id ? nextChat : entry),
+    })
+  }
+
   const selectTab = (tab: Tab) => {
     setActiveTab(tab)
     setWorkspaceMenuOpen(false)
     setOptionsMenuOpen(false)
+    setChatSidebarOpen(false)
   }
 
   const renameWorkspace = async (name: string) => {
@@ -186,6 +246,7 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
 
   const openWorkspaceMenu = async () => {
     setOptionsMenuOpen(false)
+    setChatSidebarOpen(false)
     setWorkspaceMenuOpen(value => !value)
     // The list is read when the menu opens so it never shows a stale name or
     // a workspace another surface created.
@@ -203,7 +264,10 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
   /** Rebinds the whole UI to a workspace that is already in the index. */
   const bindWorkspace = async (targetId: string) => {
     console.log('TRACE bind:start', targetId, 'derived', derivedFiles.length)
-    const workspace = await repository.hydrateWorkspace(targetId, { derivedFiles })
+    const [workspace, chats] = await Promise.all([
+      repository.hydrateWorkspace(targetId, { derivedFiles }),
+      repository.loadChats(targetId),
+    ])
     console.log('TRACE bind:hydrated')
     await repository.setActiveWorkspace(targetId)
     const summaries = await repository.listWorkspaces()
@@ -214,13 +278,14 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
       name: summaries.find(entry => entry.id === targetId)?.name ?? 'Workspace',
       workspace,
     })
-    // A conversation is about the project it was held in, so chat and preview
-    // start clean rather than carrying the previous workspace's context.
-    setMessages([])
+    chatDocumentRef.current = chats
+    setChatDocument(chats)
+    setChatSaveError(null)
     setRunState('ready')
     setPreviewRefreshToken(value => value + 1)
     setActiveTab('chat')
     setWorkspaceMenuOpen(false)
+    setChatSidebarOpen(false)
   }
 
   /**
@@ -235,6 +300,7 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
     try {
       console.log('TRACE change:flushing')
       await autosaveRef.current?.flush()
+      await chatAutosaveRef.current?.flush()
       console.log('TRACE change:flushed')
       await change()
       console.log('TRACE change:changed')
@@ -268,6 +334,30 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
 
   const createWorkspace = () => {
     void changeWorkspace(scaffoldNewWorkspace).catch(reportFailure('Unable to create a workspace.'))
+  }
+
+  const createChatSession = () => {
+    if (runState === 'thinking') return
+    const current = chatDocumentRef.current
+    const chat = createChat(Date.now())
+    commitChats({ ...current, activeChatId: chat.id, chats: [chat, ...current.chats] })
+    setRunState('ready')
+    setChatSidebarOpen(false)
+    setActiveTab('chat')
+  }
+
+  const openChatSession = (chatId: string) => {
+    if (runState === 'thinking') return
+    const current = chatDocumentRef.current
+    if (chatId === current.activeChatId) {
+      setChatSidebarOpen(false)
+      return
+    }
+    if (!current.chats.some(chat => chat.id === chatId)) return
+    commitChats({ ...current, activeChatId: chatId })
+    setRunState('ready')
+    setChatSidebarOpen(false)
+    setActiveTab('chat')
   }
 
   /**
@@ -354,6 +444,11 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
         activeWorkspaceId={session.id}
         busy={switching || runState === 'thinking'}
         onToggleWorkspaceMenu={() => void openWorkspaceMenu()}
+        onToggleChats={() => {
+          setWorkspaceMenuOpen(false)
+          setOptionsMenuOpen(false)
+          setChatSidebarOpen(value => !value)
+        }}
         onCreateWorkspace={createWorkspace}
         onSelectWorkspace={openWorkspace}
         onToggleOptionsMenu={() => {
@@ -372,14 +467,14 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
 
       <main className="workspace-layout">
         <ChatPane
-          // ChatPane owns model-facing context in refs. Remount it when the
-          // workspace changes so a cleared transcript also means a new chat.
-          key={session.id}
+          // ChatPane owns model-facing context in refs. Each persisted chat
+          // gets its own component lifecycle and reconstructed context.
+          key={`${session.id}:${activeChat.id}`}
           active={activeTab === 'chat'}
           workspace={workspace}
           runState={runState}
           messages={messages}
-          onMessagesChange={setMessages}
+          onMessagesChange={updateMessages}
           onRunStateChange={updateRunState}
           onRunTool={runTool}
           getWorkspaceSnapshot={() => activeWorkspace.snapshot()}
@@ -398,9 +493,20 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
         />
       </main>
 
-      {saveError && <p className="save-alert" role="alert">Not saved to Layla: {saveError}</p>}
+      {(saveError || chatSaveError) && (
+        <p className="save-alert" role="alert">Not saved to Layla: {saveError || chatSaveError}</p>
+      )}
 
       <MobileNav activeTab={activeTab} runState={runState} onSelect={selectTab} />
+      <ChatSidebar
+        open={chatSidebarOpen}
+        chats={chatDocument.chats}
+        activeChatId={activeChat.id}
+        busy={switching || runState === 'thinking'}
+        onClose={() => setChatSidebarOpen(false)}
+        onCreateChat={createChatSession}
+        onSelectChat={openChatSession}
+      />
       {debugOpen && <DebugPanel messages={messages} onClose={() => setDebugOpen(false)} />}
       {renameOpen && (
         <RenameWorkspaceDialog

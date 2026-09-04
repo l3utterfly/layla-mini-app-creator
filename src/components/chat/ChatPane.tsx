@@ -26,7 +26,6 @@ type ChatPaneProps = {
   getWorkspaceSnapshot: () => VirtualWorkspaceSnapshot
 }
 
-let nextMessageNumber = 1
 const STREAM_RENDER_INTERVAL_MS = 200
 
 const EXAMPLE_PROMPTS: { icon: IconName; prompt: string }[] = [
@@ -36,7 +35,9 @@ const EXAMPLE_PROMPTS: { icon: IconName; prompt: string }[] = [
 ]
 
 function createMessageId() {
-  return `message_${nextMessageNumber++}`
+  // IDs must stay unique across app reloads now that transcripts are persisted.
+  const values = crypto.getRandomValues(new Uint32Array(4))
+  return `message_${[...values].map(value => value.toString(36)).join('')}`
 }
 
 function reconstructRawOutput(reasoning: string, content: string) {
@@ -49,6 +50,22 @@ function serializeToolResult(result: ToolResultEnvelope) {
 
 function serializeToolResults(results: ToolResultEnvelope[]) {
   return results.map(serializeToolResult).join('\n')
+}
+
+/** Rebuilds the exact model-facing sequence represented by a saved transcript. */
+function contextFromMessages(messages: ConversationMessage[]): ChatCompletionMessageParam[] {
+  const context: ChatCompletionMessageParam[] = []
+  for (const message of messages) {
+    if (message.role === 'user') {
+      context.push({ role: 'user', content: message.content })
+      continue
+    }
+    if (message.state !== 'complete') continue
+    context.push({ role: 'assistant', content: message.content })
+    const results = message.toolRun?.activities.flatMap(activity => activity.result ? [activity.result] : []) ?? []
+    if (results.length) context.push({ role: 'user', content: serializeToolResults(results) })
+  }
+  return context
 }
 
 function summarizeToolCall(call: ToolCall) {
@@ -85,7 +102,7 @@ export function ChatPane({
   const [composer, setComposer] = useState('')
   const composerTextarea = useRef<HTMLTextAreaElement>(null)
   const activeStream = useRef<ReturnType<typeof layla.chat.completions.stream> | null>(null)
-  const contextMessages = useRef<ChatCompletionMessageParam[]>([])
+  const contextMessages = useRef<ChatCompletionMessageParam[]>(contextFromMessages(messages))
   const cancellationRequested = useRef(false)
   const conversation = useRef<HTMLDivElement>(null)
   const shouldAutoScroll = useRef(true)

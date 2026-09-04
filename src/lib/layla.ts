@@ -27,7 +27,15 @@ type ChatCompletionChunk = {
   }
 }
 
-const llamaModel = import.meta.env.VITE_LLAMA_MODEL || 'local-model'
+const ninferModel =
+  import.meta.env.VITE_NINFER_MODEL ||
+  import.meta.env.VITE_LLAMA_MODEL ||
+  'qwen3.8-27b'
+const configuredNinferMaxTokens = Number(import.meta.env.VITE_NINFER_MAX_TOKENS)
+const ninferMaxTokens =
+  Number.isSafeInteger(configuredNinferMaxTokens) && configuredNinferMaxTokens > 0
+    ? configuredNinferMaxTokens
+    : 131_072
 let activeMockRequest: AbortController | null = null
 
 function toOpenAIMessage(message: LaylaChatMessage): OpenAIMessage {
@@ -64,13 +72,14 @@ async function* requestLocalCompletion(messages: LaylaChatMessage[]) {
   activeMockRequest = controller
 
   try {
-    const response = await fetch('/llama/v1/chat/completions', {
+    const response = await fetch('/ninfer/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: llamaModel,
+        model: ninferModel,
         messages: messages.map(toOpenAIMessage),
         stream: true,
+        max_tokens: ninferMaxTokens,
         chat_template_kwargs: {
           enable_thinking: true,
         },
@@ -81,9 +90,9 @@ async function* requestLocalCompletion(messages: LaylaChatMessage[]) {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as ChatCompletionChunk | null
-      throw new Error(payload?.error?.message || `llama-server returned HTTP ${response.status}`)
+      throw new Error(payload?.error?.message || `ninfer-serve returned HTTP ${response.status}`)
     }
-    if (!response.body) throw new Error('llama-server returned a streaming response without a body')
+    if (!response.body) throw new Error('ninfer-serve returned a streaming response without a body')
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -174,7 +183,7 @@ const hasLaylaHost = typeof window !== 'undefined' && !!window.ReactNativeWebVie
 if (import.meta.env.DEV && !hasLaylaHost) {
   installLaylaMock({
     debug: true,
-    inferenceEngines: [`llama-server:${llamaModel}`],
+    inferenceEngines: [`ninfer:${ninferModel}`],
     respond: requestLocalCompletion,
     latencyMs: 0,
     tokenDelayMs: 0,

@@ -6,6 +6,7 @@ export type WorkspacePersistenceErrorCode =
   | 'DELETE_FAILED'
   | 'INDEX_CORRUPT'
   | 'INDEX_VERSION_UNSUPPORTED'
+  | 'CHATS_CORRUPT'
   | 'WORKSPACE_NOT_FOUND'
   | 'WORKSPACE_EXISTS'
   | 'INVALID_NAME'
