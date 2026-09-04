@@ -372,6 +372,9 @@ function App({ repository, workspaceId, workspaceName, virtualWorkspace, derived
 
       <main className="workspace-layout">
         <ChatPane
+          // ChatPane owns model-facing context in refs. Remount it when the
+          // workspace changes so a cleared transcript also means a new chat.
+          key={session.id}
           active={activeTab === 'chat'}
           workspace={workspace}
           runState={runState}

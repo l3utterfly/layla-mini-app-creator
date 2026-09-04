@@ -11,8 +11,8 @@ export const PERSISTENCE_SCHEMA_VERSION = 1
  * One virtual-workspace file as it exists on the host.
  *
  * `path` is the workspace-relative path the agent and UI see. `blob` is the
- * flat host filename that holds its bytes. The two are decoupled so a rename
- * only rewrites `index.json`, never the blob.
+ * private-directory-relative host path that holds its bytes. The two are
+ * decoupled so a rename only rewrites `index.json`, never the blob.
  */
 export type PersistedFileEntry = {
   path: string
@@ -36,9 +36,8 @@ export type PersistedWorkspaceEntry = {
   entryPath: string
   files: PersistedFileEntry[]
   /**
-   * Blobs whose index entry is gone but whose host file could not be cleared
-   * yet. The host exposes no delete API, so these are retried by a sweep
-   * instead of being lost.
+   * Blobs whose index entry is gone but whose host file could not be deleted
+   * yet. These are retried by a sweep instead of being lost.
    */
   orphanedBlobs?: string[]
 }

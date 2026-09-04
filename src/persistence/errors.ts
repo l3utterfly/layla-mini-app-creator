@@ -3,6 +3,7 @@ export type WorkspacePersistenceErrorCode =
   | 'HOST_UNAVAILABLE'
   | 'READ_FAILED'
   | 'WRITE_FAILED'
+  | 'DELETE_FAILED'
   | 'INDEX_CORRUPT'
   | 'INDEX_VERSION_UNSUPPORTED'
   | 'WORKSPACE_NOT_FOUND'

@@ -4,6 +4,7 @@ export {
   DERIVED_PATH_PREFIXES,
   INDEX_BACKUP_FILE_NAME,
   INDEX_FILE_NAME,
+  WORKSPACES_DIRECTORY,
   blobFileName,
   createBlobId,
   createWorkspaceId,
@@ -11,6 +12,7 @@ export {
   isPersistedPath,
   persistedWorkspaceFiles,
   randomId,
+  workspaceDirectory,
 } from './layout.ts'
 export { base64ToUtf8, stripDataUriPrefix, utf8ToBase64 } from './codec.ts'
 export {

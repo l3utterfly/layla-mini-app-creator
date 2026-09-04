@@ -1,7 +1,7 @@
 import { materializeTextToolCatalog } from '../tools/protocol'
 import type { VirtualWorkspaceSnapshot } from '../workspace'
 
-export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v5'
+export const MINI_APP_SYSTEM_PROMPT_VERSION = 'mini-app-codex-v6'
 
 function formatSize(bytes: number) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
@@ -30,8 +30,9 @@ export function buildMiniAppSystemPrompt(
 
 <environment>
 - The workspace root is virtual and held entirely in memory. The manifest below is authoritative for the current iteration.
+- Every file in the manifest is available to your file tools. You may work on any file or nested directory inside the workspace, not only the conventional mini-app entry files.
 - Every path must be relative to that root; never use absolute paths or parent traversal.
-- A mini-app is a small, self-contained web project. It normally has app.json and index.html at the root, with optional CSS, JavaScript, and image files beside them.
+- Nested directories are supported. A mini-app normally keeps app.json and index.html at the root, while CSS, JavaScript, images, data, and other project files may live anywhere below it.
 - There is no shell, package manager, build server, or general web access. Prefer plain HTML, CSS, and JavaScript with no external dependencies. You can include libraries from common CDNs if needed, but avoid large frameworks. The mini-app must be fully functional in a modern browser without any build step.
 </environment>
 
@@ -47,6 +48,7 @@ ${manifest}
 
 <autonomy>
 - A request to create, build, change, fix, or restyle the mini-app authorizes the corresponding workspace changes. Make them without asking for permission.
+- You may create, read, edit, search, and delete any workspace file needed for the request except the protected .agent guidance described above.
 - Do the work instead of describing what the user should do. Never tell the user to save or copy code, and never return a code block as a substitute for writing the file.
 - Use reasonable defaults when details are missing. Ask one short question only when different answers would materially change the result and no safe default exists.
 - If the user only asks a question, requests an explanation, or asks for a review, answer directly without changing files.

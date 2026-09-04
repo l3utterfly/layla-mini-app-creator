@@ -16,25 +16,30 @@ to render an empty state.
 
 ## What the host gives us
 
-`@layla-network/sdk` exposes exactly two file calls against the mini-app's
-private directory:
+`@layla-network/sdk` exposes relative-path file operations against the
+mini-app's private directory:
 
 ```ts
 layla.utils.saveFile(filename, contentBase64, share)  // share: false to persist
 layla.utils.readFile(filename)                        // content_base64 | null
+layla.utils.listDir(path)                             // relative entries
+layla.utils.deleteFileOrDir(path)                     // recursive for directories
 ```
 
-There is no list, no delete, no rename, no directory guarantee, and no
-transaction. Four consequences shape the whole design:
+Paths may contain nested folders, and `saveFile` creates missing parent
+directories. There is still no rename or transaction. Four consequences shape
+the design:
 
 - **`index.json` is the directory.** A blob that is not referenced there is
   unreachable, so the index is written last on save and first on delete.
-- **Host filenames are flat.** Paths never appear in a filename; they live in
-  the index and map to opaque blob ids.
-- **Delete is an overwrite.** Removing a file clears its blob to empty content
-  and records it in `orphanedBlobs` until that write succeeds. A workspace entry
-  tracks the blobs its own files orphaned; the index tracks what a deleted
-  workspace left behind, since those outlive the entry that named them.
+- **Each workspace has a host directory.** Blobs live under
+  `workspaces/<workspaceId>/`, so different workspaces are physically isolated.
+  Virtual paths still map to opaque blob ids, avoiding host filename restrictions
+  and file/directory collisions while keeping rename metadata-only.
+- **Delete is explicit.** Removing a file calls `deleteFileOrDir` and records
+  failures in `orphanedBlobs` for a later sweep. A workspace entry tracks blobs
+  its own files orphaned; the index tracks what a deleted workspace left behind,
+  since those outlive the entry that named them.
 - **Atomic swap is a copy.** The previous index is copied to
   `index.backup.json` before each rewrite, and readers fall back to it when the
   primary index will not parse.
@@ -48,7 +53,9 @@ export, not persistence.
 ```
 index.json                    every workspace, its metadata, and its file table
 index.backup.json             the previous index, for recovery
-wk4f2a91c7de.b3c1e90a.blob    one virtual-workspace file
+workspaces/
+  wk4f2a91c7de/
+    b3c1e90a.blob             one virtual-workspace file
 ```
 
 `index.json`:
@@ -69,7 +76,7 @@ wk4f2a91c7de.b3c1e90a.blob    one virtual-workspace file
       "files": [
         {
           "path": "app.json",
-          "blob": "wk4f2a91c7de.b3c1e90a.blob",
+          "blob": "workspaces/wk4f2a91c7de/b3c1e90a.blob",
           "mimeType": "application/json",
           "size": 128,
           "revision": "42-1a2b3c4d",
@@ -91,6 +98,10 @@ blobs that actually changed.
 Blob ids are random, not sequential, so a name is never reused after a delete
 and a stale host file can never resurface under a new entry.
 
+Indexes created by older builds remain valid. Their flat
+`<workspaceId>.<blobId>.blob` paths are read and deleted as recorded, while all
+new blobs use the workspace-directory layout.
+
 ## What is not persisted
 
 `.agent/**` holds the trusted `layla-sdk` skill. It is fetched from bundled
@@ -111,8 +122,8 @@ same exclusion `exportWorkspace` already applies to ZIPs.
 | `WorkspaceRepository.ts` | `index.json` plus blob orchestration |
 | `WorkspaceAutosave.ts` | Workspace change events → debounced writes |
 
-`HostFileStore` is the seam. Above it everything is plain text and flat
-filenames; below it lives base64, data URI prefixes, and the bridge. Tests use
+`HostFileStore` is the seam. Above it everything is plain text and relative
+host paths; below it lives base64, data URI prefixes, and the bridge. Tests use
 `createMemoryHostFileStore`; the real app uses `createLaylaHostFileStore(layla.utils)`.
 
 ## Lifecycle

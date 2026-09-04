@@ -287,7 +287,6 @@ export class WorkspaceRepository {
   deleteWorkspace(workspaceId: string): Promise<void> {
     return this.#enqueue(async () => {
       const index = await this.#requireIndex()
-      console.log('REPO delete:enter')
       const entry = this.#requireEntry(index, workspaceId)
 
       index.orphanedBlobs = [
@@ -297,21 +296,16 @@ export class WorkspaceRepository {
       ]
       index.workspaces = index.workspaces.filter(candidate => candidate.id !== workspaceId)
       if (index.activeWorkspaceId === workspaceId) index.activeWorkspaceId = null
-      console.log('REPO delete:orphans', index.orphanedBlobs.length)
       await this.#writeIndex(index)
-      console.log('REPO delete:index-written')
 
       const cleared = await this.#clearOrphanedBlobs(index)
-      console.log('REPO delete:cleared', cleared)
       if (cleared) await this.#writeIndex(index)
-      console.log('REPO delete:exit')
     })
   }
 
   /**
-   * Best-effort clearing of blobs the host still holds but the index no longer
-   * references. Overwrites with empty content because the host protocol has no
-   * delete command. Resolves with the number of blobs cleared.
+   * Best-effort deletion of blobs the host still holds but the index no longer
+   * references. Resolves with the number of blobs removed.
    */
   sweepOrphanedBlobs(workspaceId?: string): Promise<number> {
     return this.#enqueue(async () => {
@@ -332,12 +326,7 @@ export class WorkspaceRepository {
    * succeeded or failed, so one failed save cannot wedge the queue.
    */
   #enqueue<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
-    const label = new Error().stack?.split(String.fromCharCode(10))[2]?.trim().slice(0, 60)
     const result = this.#queue.then(operation, operation)
-    void result.then(
-      () => console.log('QUEUE settled', label),
-      error => console.log('QUEUE rejected', label, error),
-    )
     this.#queue = result.then(
       () => undefined,
       () => undefined,
@@ -481,7 +470,7 @@ export class WorkspaceRepository {
     let cleared = 0
     for (const blob of holder.orphanedBlobs ?? []) {
       try {
-        await this.#store.write(blob, '')
+        await this.#store.remove(blob)
         cleared += 1
       } catch {
         // Reclaiming space is best effort; a blob that resists clearing stays

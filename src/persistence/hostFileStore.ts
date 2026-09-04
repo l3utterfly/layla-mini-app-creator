@@ -4,15 +4,17 @@ import { WorkspacePersistenceError } from './errors.ts'
 /**
  * The persistence port.
  *
- * Everything above this interface works in plain text and flat filenames.
+ * Everything above this interface works in plain text and relative host paths.
  * Everything below it knows about base64, data URI prefixes, and the Layla
  * bridge. Swapping the host for tests, or for a different backing store later,
  * means providing another implementation of this type and nothing else.
  */
 export type HostFileStore = {
   /** Resolves to the file's decoded text, or `null` when it does not exist. */
-  read(filename: string): Promise<string | null>
-  write(filename: string, content: string): Promise<void>
+  read(path: string): Promise<string | null>
+  write(path: string, content: string): Promise<void>
+  /** Removes one file or a directory tree relative to the private app directory. */
+  remove(path: string): Promise<void>
 }
 
 /** The slice of `layla.utils` this module depends on. */
@@ -25,6 +27,7 @@ export type LaylaFileApi = {
   readFile(
     filename: string,
   ): Promise<{ filename: string; content_base64: string | null; message?: string }>
+  deleteFileOrDir(path: string): Promise<unknown>
 }
 
 function describeCause(error: unknown) {
@@ -41,7 +44,7 @@ function isBridgeUnavailable(error: unknown) {
 }
 
 function hostError(
-  code: 'READ_FAILED' | 'WRITE_FAILED',
+  code: 'READ_FAILED' | 'WRITE_FAILED' | 'DELETE_FAILED',
   filename: string,
   error: unknown,
 ): WorkspacePersistenceError {
@@ -56,7 +59,9 @@ function hostError(
     code,
     code === 'READ_FAILED'
       ? `Layla was unable to read ${filename}.`
-      : `Layla was unable to save ${filename}.`,
+      : code === 'WRITE_FAILED'
+        ? `Layla was unable to save ${filename}.`
+        : `Layla was unable to delete ${filename}.`,
     { filename, cause: describeCause(error) },
   )
 }
@@ -109,6 +114,14 @@ export function createLaylaHostFileStore(files: LaylaFileApi): HostFileStore {
         )
       }
     },
+
+    async remove(path) {
+      try {
+        await files.deleteFileOrDir(path)
+      } catch (error) {
+        throw hostError('DELETE_FAILED', path, error)
+      }
+    },
   }
 }
 
@@ -124,6 +137,12 @@ export function createMemoryHostFileStore(seed: Record<string, string> = {}): Ho
     },
     async write(filename, content) {
       contents.set(filename, content)
+    },
+    async remove(path) {
+      const prefix = `${path.replace(/\/$/, '')}/`
+      for (const filename of contents.keys()) {
+        if (filename === path || filename.startsWith(prefix)) contents.delete(filename)
+      }
     },
   }
 }

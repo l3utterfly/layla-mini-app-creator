@@ -4,17 +4,17 @@ import type { VirtualWorkspaceFile } from '../workspace/index.ts'
 /**
  * Host file layout.
  *
- * The Layla host exposes a flat, private per-mini-app directory through
- * `saveFile`/`readFile` only: there is no listing, delete, or rename call, and
- * directory support is not guaranteed. Every host filename is therefore flat
- * and built from characters that survive any filesystem.
+ * The Layla host exposes a private per-mini-app directory and accepts relative
+ * paths. Each virtual workspace gets its own host directory while opaque blob
+ * names keep virtual paths decoupled from host filesystem restrictions.
  *
  *   index.json                      registry of every workspace and its files
  *   index.backup.json               previous index, kept for recovery
- *   <workspaceId>.<blobId>.blob     one virtual-workspace file
+ *   workspaces/<workspaceId>/<blobId>.blob
  */
 export const INDEX_FILE_NAME = 'index.json'
 export const INDEX_BACKUP_FILE_NAME = 'index.backup.json'
+export const WORKSPACES_DIRECTORY = 'workspaces'
 export const BLOB_FILE_EXTENSION = '.blob'
 
 /**
@@ -56,10 +56,16 @@ export function createBlobId() {
   return `b${randomId(8)}`
 }
 
+export function workspaceDirectory(workspaceId: string) {
+  return `${WORKSPACES_DIRECTORY}/${workspaceId}`
+}
+
 export function blobFileName(workspaceId: string, blobId: string) {
-  return `${workspaceId}.${blobId}${BLOB_FILE_EXTENSION}`
+  return `${workspaceDirectory(workspaceId)}/${blobId}${BLOB_FILE_EXTENSION}`
 }
 
 export function isBlobFileNameFor(workspaceId: string, filename: string) {
-  return filename.startsWith(`${workspaceId}.`) && filename.endsWith(BLOB_FILE_EXTENSION)
+  const isCurrentLayout = filename.startsWith(`${workspaceDirectory(workspaceId)}/`)
+  const isLegacyLayout = filename.startsWith(`${workspaceId}.`)
+  return (isCurrentLayout || isLegacyLayout) && filename.endsWith(BLOB_FILE_EXTENSION)
 }

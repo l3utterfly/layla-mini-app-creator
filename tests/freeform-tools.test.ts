@@ -317,6 +317,9 @@ ${JSON.stringify({
     assert.match(systemPrompt, /search_files treats query as a JavaScript regular expression by default/)
     assert.match(systemPrompt, /first action.*read \.agent\/layla-sdk\/SKILL\.md/i)
     assert.match(systemPrompt, /trusted, read-only application guidance/)
+    assert.match(systemPrompt, /any file or nested directory inside the workspace/)
+    assert.match(systemPrompt, /Nested directories are supported/)
+    assert.match(systemPrompt, /create, read, edit, search, and delete any workspace file needed/)
     assert.equal(systemPrompt.includes('Hello, virtual workspace'), false)
 
     const listCall = parseToolCall(`<tool_call name="list_files">

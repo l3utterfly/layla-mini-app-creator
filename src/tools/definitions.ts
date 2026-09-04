@@ -24,13 +24,13 @@ function bridgedHandler<TArguments extends JsonObject, TResult extends JsonObjec
     context.invoke<TResult>(name, argumentsValue)
 }
 
-const pathProperty = { type: 'string' as const, description: 'Normalized workspace-relative path.' }
+const pathProperty = { type: 'string' as const, description: 'Path to any file or directory inside the workspace, relative to its root. Nested paths are supported.' }
 const expectedRevisionProperty = { type: 'string' as const, description: 'Revision observed by the model before editing.' }
 
 export const toolDefinitions = [
   defineTool<'list_files', ListFilesArguments, FilesResult>({
     name: 'list_files',
-    description: 'List the filtered workspace tree with sizes and revisions.',
+    description: 'List files anywhere in the workspace tree, optionally below a nested directory, with sizes and revisions.',
     inputSchema: { type: 'object', properties: { path: pathProperty }, additionalProperties: false },
     effect: 'read', concurrency: 'parallel', resultBudget: 4_000,
     handler: bridgedHandler('list_files'),

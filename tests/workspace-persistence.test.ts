@@ -4,7 +4,11 @@ import { nextWorkspaceName } from '../src/data/bootstrapWorkspace.ts'
 import { attachWorkspaceAutosave } from '../src/persistence/WorkspaceAutosave.ts'
 import { createWorkspaceRepository } from '../src/persistence/WorkspaceRepository.ts'
 import { WorkspacePersistenceError } from '../src/persistence/errors.ts'
-import { INDEX_BACKUP_FILE_NAME, INDEX_FILE_NAME } from '../src/persistence/layout.ts'
+import {
+  INDEX_BACKUP_FILE_NAME,
+  INDEX_FILE_NAME,
+  workspaceDirectory,
+} from '../src/persistence/layout.ts'
 import type { HostFileStore } from '../src/persistence/hostFileStore.ts'
 import type { PersistedIndex } from '../src/persistence/types.ts'
 
@@ -12,18 +16,24 @@ type TrackingStore = {
   store: HostFileStore
   contents: Map<string, string>
   writes: string[]
+  removes: string[]
   failWrites: Set<string>
+  failRemoves: Set<string>
 }
 
 function createTrackingStore(seed: Record<string, string> = {}): TrackingStore {
   const contents = new Map(Object.entries(seed))
   const writes: string[] = []
+  const removes: string[] = []
   const failWrites = new Set<string>()
+  const failRemoves = new Set<string>()
 
   return {
     contents,
     writes,
+    removes,
     failWrites,
+    failRemoves,
     store: {
       async read(filename) {
         return contents.get(filename) ?? null
@@ -32,6 +42,14 @@ function createTrackingStore(seed: Record<string, string> = {}): TrackingStore {
         if (failWrites.has(filename)) throw new Error(`refusing to write ${filename}`)
         writes.push(filename)
         contents.set(filename, content)
+      },
+      async remove(path) {
+        if (failRemoves.has(path)) throw new Error(`refusing to remove ${path}`)
+        removes.push(path)
+        const prefix = `${path.replace(/\/$/, '')}/`
+        for (const filename of contents.keys()) {
+          if (filename === path || filename.startsWith(prefix)) contents.delete(filename)
+        }
       },
     },
   }
@@ -66,7 +84,10 @@ test('creating a workspace writes one blob per file and an index that references
   const entry = index.workspaces[0]!
   assert.deepEqual(entry.files.map(file => file.path), ['app.json', 'index.html'])
   for (const file of entry.files) {
-    assert.ok(file.blob.startsWith(`${summary.id}.`), `${file.blob} is not scoped to the workspace`)
+    assert.ok(
+      file.blob.startsWith(`${workspaceDirectory(summary.id)}/`),
+      `${file.blob} is not scoped to the workspace directory`,
+    )
     assert.ok(tracking.contents.has(file.blob), `${file.blob} was not written`)
   }
   assert.equal(tracking.contents.get(entry.files[1]!.blob), '<h1>Weather</h1>')
@@ -98,6 +119,39 @@ test('hydrating restores persisted files and re-seeds derived ones', async () =>
   assert.equal(workspace.readFile('index.html').content, '<h1>Weather</h1>')
   assert.equal(workspace.readFile('app.json').mimeType, 'application/json')
   assert.equal(workspace.readFile('.agent/layla-sdk/SKILL.md').content, 'skill from this build')
+})
+
+test('nested virtual files persist under the workspace host directory', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const summary = await repository.createWorkspace({
+    name: 'Nested',
+    files: [{ name: 'assets/data/settings.json', content: '{"theme":"night"}' }],
+  })
+
+  const entry = readIndex(tracking).workspaces[0]!.files[0]!
+  assert.equal(entry.path, 'assets/data/settings.json')
+  assert.match(entry.blob, new RegExp(`^${workspaceDirectory(summary.id)}/b[0-9a-z]{8}\\.blob$`))
+
+  const workspace = await createWorkspaceRepository(tracking.store).hydrateWorkspace(summary.id)
+  assert.equal(workspace.readFile('assets/data/settings.json').content, '{"theme":"night"}')
+})
+
+test('existing indexes with legacy flat blob names remain readable', async () => {
+  const tracking = createTrackingStore()
+  const repository = createWorkspaceRepository(tracking.store)
+  const summary = await repository.createWorkspace({ name: 'Legacy', files: seedFiles })
+  const index = readIndex(tracking)
+  const file = index.workspaces[0]!.files[0]!
+  const legacyBlob = `${summary.id}.blegacy1.blob`
+
+  tracking.contents.set(legacyBlob, tracking.contents.get(file.blob)!)
+  tracking.contents.delete(file.blob)
+  file.blob = legacyBlob
+  tracking.contents.set(INDEX_FILE_NAME, `${JSON.stringify(index, null, 2)}\n`)
+
+  const workspace = await createWorkspaceRepository(tracking.store).hydrateWorkspace(summary.id)
+  assert.equal(workspace.readFile(file.path).content, '{"title":"Weather"}')
 })
 
 test('a blob listed in the index but missing on the host is an integrity failure', async () => {
@@ -137,7 +191,7 @@ test('saving rewrites only the blobs whose revision moved', async () => {
   assert.equal(entry.files[1]!.revision, workspace.readFile('index.html').revision)
 })
 
-test('deleting a file drops its index entry and clears the blob afterwards', async () => {
+test('deleting a file drops its index entry and removes the host blob afterwards', async () => {
   const tracking = createTrackingStore()
   const repository = createWorkspaceRepository(tracking.store)
   const summary = await repository.createWorkspace({ name: 'Weather', files: seedFiles })
@@ -150,7 +204,8 @@ test('deleting a file drops its index entry and clears the blob afterwards', asy
   const entry = readIndex(tracking).workspaces[0]!
   assert.deepEqual(entry.files.map(file => file.path), ['index.html'])
   assert.deepEqual(entry.orphanedBlobs, [])
-  assert.equal(tracking.contents.get(removedBlob), '')
+  assert.equal(tracking.contents.has(removedBlob), false)
+  assert.deepEqual(tracking.removes, [removedBlob])
 })
 
 test('a blob that cannot be cleared stays listed for a later sweep', async () => {
@@ -160,13 +215,13 @@ test('a blob that cannot be cleared stays listed for a later sweep', async () =>
   const workspace = await repository.hydrateWorkspace(summary.id)
   const removedBlob = readIndex(tracking).workspaces[0]!.files[0]!.blob
 
-  tracking.failWrites.add(removedBlob)
+  tracking.failRemoves.add(removedBlob)
   workspace.deleteFile('app.json')
   await repository.saveChangedFiles(summary.id, workspace.snapshot(), ['app.json'])
 
   assert.deepEqual(readIndex(tracking).workspaces[0]!.orphanedBlobs, [removedBlob])
 
-  tracking.failWrites.clear()
+  tracking.failRemoves.clear()
   assert.equal(await repository.sweepOrphanedBlobs(summary.id), 1)
   assert.deepEqual(readIndex(tracking).workspaces[0]!.orphanedBlobs, [])
 })
@@ -218,8 +273,8 @@ test('deleting a workspace clears its blobs and leaves the others intact', async
   assert.equal(index.activeWorkspaceId, null)
   assert.deepEqual(index.orphanedBlobs, [])
 
-  for (const blob of doomedBlobs) assert.equal(tracking.contents.get(blob), '')
-  for (const blob of keptBlobs) assert.notEqual(tracking.contents.get(blob), '')
+  for (const blob of doomedBlobs) assert.equal(tracking.contents.has(blob), false)
+  for (const blob of keptBlobs) assert.equal(tracking.contents.has(blob), true)
 
   const reopened = createWorkspaceRepository(tracking.store)
   assert.equal((await reopened.hydrateWorkspace(kept.id)).readFile('index.html').content, '<h1>Weather</h1>')
@@ -235,7 +290,7 @@ test('blobs a delete cannot clear survive in the index until a sweep', async () 
   const doomed = await repository.createWorkspace({ name: 'Scratch', files: seedFiles })
   const stubborn = readIndex(tracking).workspaces[0]!.files[0]!.blob
 
-  tracking.failWrites.add(stubborn)
+  tracking.failRemoves.add(stubborn)
   await repository.deleteWorkspace(doomed.id)
 
   // The entry is gone either way; only the space reclamation is outstanding.
@@ -243,10 +298,10 @@ test('blobs a delete cannot clear survive in the index until a sweep', async () 
   assert.deepEqual(index.workspaces, [])
   assert.deepEqual(index.orphanedBlobs, [stubborn])
 
-  tracking.failWrites.clear()
+  tracking.failRemoves.clear()
   assert.equal(await repository.sweepOrphanedBlobs(), 1)
   assert.deepEqual(readIndex(tracking).orphanedBlobs, [])
-  assert.equal(tracking.contents.get(stubborn), '')
+  assert.equal(tracking.contents.has(stubborn), false)
 })
 
 test('deleting an unknown workspace fails without changing the index', async () => {
