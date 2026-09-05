@@ -22,7 +22,7 @@ function decodeBase64(value: string) {
   return bytes
 }
 
-function fileBytes(file: VirtualWorkspaceFile) {
+export function workspaceFileBytes(file: VirtualWorkspaceFile) {
   if (file.mimeType.startsWith('image/')) {
     const dataUrl = /^data:[^,]*?(;base64)?,([\s\S]*)$/.exec(file.content)
     if (dataUrl) {
@@ -43,7 +43,7 @@ export function exportableWorkspaceFiles(files: VirtualWorkspaceFile[]) {
 export function createWorkspaceZip(files: VirtualWorkspaceFile[]) {
   const entries: Record<string, Uint8Array> = {}
   for (const file of exportableWorkspaceFiles(files)) {
-    entries[file.name] = fileBytes(file)
+    entries[file.name] = workspaceFileBytes(file)
   }
   return zipSync(entries, { level: 6 })
 }

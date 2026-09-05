@@ -51,7 +51,7 @@ export function TopBar({
     <header className="topbar">
       <div className="topbar-start">
         <button type="button" className="brand-trigger" onClick={onToggleChats} aria-label="Open chats">
-          <span className="brand-mark"><Icon name="sparkles" size={17} /></span>
+          <span className="brand-mark"><Icon name="message" size={17} /></span>
         </button>
         <button className="workspace-trigger" onClick={onToggleWorkspaceMenu} aria-expanded={workspaceMenuOpen} aria-label="Switch workspace">
           <span className="workspace-copy"><small>Workspace</small><strong>{workspace}</strong></span>

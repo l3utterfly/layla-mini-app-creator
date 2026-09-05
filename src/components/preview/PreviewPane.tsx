@@ -1,21 +1,31 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import type { VirtualWorkspaceSnapshot } from '../../workspace'
 import { Icon } from '../common/Icon'
 import { relayLaylaMessageToHost } from '../../lib/layla'
 import { PreviewLogsPanel, type PreviewLogEntry } from './PreviewLogsPanel'
 import {
+  PREVIEW_BRIDGE_CHANNEL,
   createPreviewBridgeError,
   injectPreviewBridge,
   isLaylaHostEventMessage,
   isPreviewBridgeRequest,
   isPreviewConsoleMessage,
 } from './previewBridge'
+import {
+  activatePreviewServiceWorker,
+  createPreviewInstanceId,
+  detectBrowserPreviewCapability,
+  publishPreviewSnapshot,
+} from './previewVirtualFs'
 
 type PreviewPaneProps = {
   active: boolean
-  indexHtml: string
   refreshToken: number
+  revision: number
+  snapshot: VirtualWorkspaceSnapshot
   workspace: string
+  workspaceId: string
 }
 
 const maxPreviewLogs = 500
@@ -37,15 +47,84 @@ function echoPreviewLog(log: PreviewLogEntry) {
   writer(`[Preview:${log.method}]`, ...log.args)
 }
 
-export function PreviewPane({ active, indexHtml, refreshToken, workspace }: PreviewPaneProps) {
+export function PreviewPane({
+  active,
+  refreshToken,
+  revision,
+  snapshot,
+  workspace,
+  workspaceId,
+}: PreviewPaneProps) {
   const [previewKey, setPreviewKey] = useState(0)
+  const [publishedPreview, setPublishedPreview] = useState<{
+    url: string
+    workspaceId: string
+  } | null>(null)
+  const [previewDiagnostic, setPreviewDiagnostic] = useState<string | null>(null)
   const [fullPreview, setFullPreview] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [logs, setLogs] = useState<PreviewLogEntry[]>([])
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const nextLogId = useRef(1)
+  const [instanceId] = useState(createPreviewInstanceId)
   const [deviceScale, setDeviceScale] = useState(1)
+  const indexHtml = snapshot.files.find(file => file.name === 'index.html')?.content ?? ''
+
+  useEffect(() => {
+    let cancelled = false
+    const capability = detectBrowserPreviewCapability()
+
+    const fallBackToSrcDoc = (diagnostic: string) => {
+      if (cancelled) return
+      setPublishedPreview(null)
+      setPreviewDiagnostic(diagnostic)
+      const log: PreviewLogEntry = {
+        channel: PREVIEW_BRIDGE_CHANNEL,
+        direction: 'console' as const,
+        level: 'warn' as const,
+        method: 'preview',
+        args: [diagnostic],
+        timestamp: Date.now(),
+        id: nextLogId.current++,
+      }
+      setLogs(current => current.some(entry =>
+        entry.method === log.method && entry.args[0] === diagnostic,
+      ) ? current : [...current.slice(-(maxPreviewLogs - 1)), log])
+      echoPreviewLog(log)
+    }
+
+    if (!capability.supported) {
+      fallBackToSrcDoc(capability.diagnostic)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void Promise.all([
+      activatePreviewServiceWorker(capability.serviceWorker),
+      publishPreviewSnapshot({
+        cacheStorage: capability.cacheStorage,
+        instanceId,
+        origin: window.location.origin,
+        revision,
+        snapshot,
+        workspaceId,
+      }),
+    ]).then(([, indexUrl]) => {
+      if (cancelled) return
+      indexUrl.searchParams.set('refresh', `${refreshToken}-${previewKey}`)
+      setPublishedPreview({ url: indexUrl.href, workspaceId })
+      setPreviewDiagnostic(null)
+    }).catch(error => {
+      const reason = error instanceof Error ? error.message : 'Unable to start multi-file preview.'
+      fallBackToSrcDoc(`Multi-file preview unavailable: ${reason}`)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [instanceId, previewKey, refreshToken, revision, snapshot, workspaceId])
 
   useLayoutEffect(() => {
     const relayMessage = (event: MessageEvent<unknown>) => {
@@ -121,16 +200,24 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
   const warningCount = logs.filter(log => log.level === 'warn').length
   const previewStatus = errorCount > 0
     ? `${errorCount} ${errorCount === 1 ? 'error' : 'errors'}`
-    : warningCount > 0
+    : previewDiagnostic
+      ? 'Index-only preview'
+      : warningCount > 0
       ? `${warningCount} ${warningCount === 1 ? 'warning' : 'warnings'}`
       : 'No issues'
+
+  const previewUrl = publishedPreview?.workspaceId === workspaceId
+    ? publishedPreview.url
+    : null
 
   const preview = (
     <iframe
       ref={iframeRef}
-      key={`${refreshToken}-${previewKey}`}
+      key={previewUrl ?? `fallback-${workspaceId}-${revision}-${refreshToken}-${previewKey}`}
       className="preview-iframe"
-      srcDoc={injectPreviewBridge(indexHtml)}
+      {...(previewUrl
+        ? { src: previewUrl }
+        : { srcDoc: injectPreviewBridge(indexHtml) })}
       title={`${workspace} preview`}
     />
   )
@@ -165,7 +252,10 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
       <div className="pane-heading preview-heading">
         <div><span className="eyebrow">Live preview</span><h1>{workspace}</h1></div>
         <div className="preview-actions">
-          <span className={`preview-ok${errorCount ? ' preview-has-errors' : warningCount ? ' preview-has-warnings' : ''}`}><i /> {previewStatus}</span>
+          <span
+            className={`preview-ok${errorCount ? ' preview-has-errors' : previewDiagnostic || warningCount ? ' preview-has-warnings' : ''}`}
+            title={previewDiagnostic ?? undefined}
+          ><i /> {previewStatus}</span>
           {logsButton}
           <button className="icon-button" aria-label="Refresh preview" onClick={refreshPreview}><Icon name="refresh" size={17} /></button>
           <button className="icon-button" aria-label="Open full screen" onClick={() => setFullPreview(true)}><Icon name="expand" size={17} /></button>

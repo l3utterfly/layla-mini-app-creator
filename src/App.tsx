@@ -134,7 +134,7 @@ function App({
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [files, setFiles] = useState(() => virtualWorkspace.listFiles())
+  const [workspaceSnapshot, setWorkspaceSnapshot] = useState(() => virtualWorkspace.snapshot())
   const [chatDocument, setChatDocument] = useState(initialChats)
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
@@ -158,11 +158,13 @@ function App({
   const [listedWorkspace, setListedWorkspace] = useState(activeWorkspace)
   if (listedWorkspace !== activeWorkspace) {
     setListedWorkspace(activeWorkspace)
-    setFiles(activeWorkspace.listFiles())
+    setWorkspaceSnapshot(activeWorkspace.snapshot())
   }
 
+  const files = workspaceSnapshot.files
+
   useEffect(
-    () => activeWorkspace.subscribe(snapshot => setFiles(snapshot.files)),
+    () => activeWorkspace.subscribe(snapshot => setWorkspaceSnapshot(snapshot)),
     [activeWorkspace],
   )
 
@@ -481,9 +483,11 @@ function App({
         />
         <PreviewPane
           active={activeTab === 'preview'}
-          indexHtml={files.find(file => file.name === 'index.html')?.content ?? ''}
           refreshToken={previewRefreshToken}
+          revision={workspaceSnapshot.revision}
+          snapshot={workspaceSnapshot}
           workspace={workspace}
+          workspaceId={session.id}
         />
         <FilesPane
           active={activeTab === 'files'}

@@ -163,18 +163,33 @@ Desktop layouts may show chat and preview side by side, but mobile tab behavior 
 
 ## Preview architecture
 
-The preview is an iframe whose document is compiled from the active workspace. `index.html` remains the source of truth.
+The preview is an iframe backed by a Service Worker virtual filesystem. Before
+the iframe navigates, the complete previewable `VirtualWorkspace` snapshot is
+published as immutable `Response` objects in Cache Storage under a URL mount
+that includes the browser instance, workspace ID, and workspace revision:
 
-For the small projects in scope, the first preview compiler should:
+```text
+/preview/{instanceId}/{workspaceId}/{revision}/index.html
+/preview/{instanceId}/{workspaceId}/{revision}/styles.css
+/preview/{instanceId}/{workspaceId}/{revision}/src/main.js
+```
 
-1. load `index.html`;
-2. resolve local stylesheet and script references from the workspace;
-3. inline local CSS and JavaScript into a generated `srcdoc` document;
-4. convert local binary assets to Blob or data URLs and rewrite their references;
-5. inject a small preview bridge before user scripts; and
-6. replace the iframe document after a debounced file change.
+The worker serves only files from that published revision, so normal relative
+stylesheets, modules, images, page navigation, and runtime fetches work without
+rewriting workspace source. Missing virtual files get an explicit 404 and never
+fall through to creator assets. Query strings are ignored for lookup, directory
+paths resolve to their `index.html`, and `.agent/**` guidance is never published.
+Imported data-URL images are decoded to their original bytes.
 
-Inlining is a preview implementation detail; exported project files remain separate. Unsupported dynamic imports, runtime file fetches, or unresolved paths should produce diagnostics rather than silently failing.
+Every HTML response receives the preview bridge before it is cached, leaving the
+stored source unchanged and preserving console, error, and Layla host relaying on
+nested pages. A revision URL is exposed to the iframe only after the whole
+snapshot is published and the narrowly scoped `/preview/` worker is active.
+Manual refreshes add a nonce while keeping the immutable revision path.
+
+If secure-context, Service Worker, registration, activation, or Cache Storage
+checks fail, the iframe falls back to the previous bridge-injected `srcdoc`
+index-only preview and surfaces a concise diagnostic.
 
 A reasonable iframe sandbox is:
 
