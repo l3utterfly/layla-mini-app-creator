@@ -14,6 +14,16 @@ cover the [tool runtime](src/tools/README.md),
 [virtual workspace](src/workspace/README.md), and
 [Layla-backed persistence](src/persistence/README.md).
 
+## Preview
+
+See the phone-first workspace and mini-app creation flow in action:
+
+<video src="./assets/layla-mini-app-creator-preview.mp4" controls playsinline width="100%">
+  <a href="./assets/layla-mini-app-creator-preview.mp4">Watch the Layla Mini-App Creator preview</a>
+</video>
+
+[Open the preview video directly](./assets/layla-mini-app-creator-preview.mp4)
+
 ## Features
 
 - Build and refine Layla mini-apps through a conversational coding agent
@@ -141,7 +151,7 @@ Layla listing metadata lives in `public/app.json`:
 
 ```text
 .
-+-- assets/                         # README and store badge assets
++-- assets/                         # Preview video and store badge assets
 +-- docs/
 |   +-- ARCHITECTURE.md             # Original design and architecture notes
 +-- public/
