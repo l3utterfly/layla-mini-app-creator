@@ -1,3 +1,5 @@
+
+
 # Layla Mini-App Creator
 
 A phone-first AI coding workspace for building, previewing, and exporting
@@ -18,9 +20,7 @@ cover the [tool runtime](src/tools/README.md),
 
 See the phone-first workspace and mini-app creation flow in action:
 
-<video src="./assets/layla-mini-app-creator-preview.mp4" controls playsinline width="100%">
-  <a href="./assets/layla-mini-app-creator-preview.mp4">Watch the Layla Mini-App Creator preview</a>
-</video>
+https://github.com/user-attachments/assets/cf6ac570-f14a-4ad0-ad52-749e6ddae2bc
 
 [Open the preview video directly](./assets/layla-mini-app-creator-preview.mp4)
 
