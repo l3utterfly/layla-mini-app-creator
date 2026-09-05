@@ -185,6 +185,20 @@ test('decodes imported data-URL images into response bytes', async () => {
   assert.equal(response.headers.get('Content-Type'), 'image/png')
 })
 
+test('decodes imported non-image binary files into response bytes', async () => {
+  const response = createPreviewFileResponse({
+    name: 'manual.pdf',
+    content: 'data:application/pdf;base64,AQIDBA==',
+    mimeType: 'application/pdf',
+    size: 4,
+    revision: '1-test',
+    updatedAt: 1,
+  })
+
+  assert.equal(response.headers.get('Content-Type'), 'application/pdf')
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3, 4])
+})
+
 test('injects the bridge into every HTML response without mutating source', async () => {
   const source = '<!doctype html><script>start()</script>'
   const workspace = createVirtualWorkspace([

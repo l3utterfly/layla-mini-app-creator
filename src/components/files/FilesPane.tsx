@@ -8,6 +8,7 @@ type ImageAssetKind = 'icon' | 'background'
 type FilesPaneProps = {
   active: boolean
   files: WorkspaceFile[]
+  onImportFile: (file: File) => Promise<string>
   onImportImage: (kind: ImageAssetKind, file: File) => Promise<string>
   onExport: () => Promise<string>
 }
@@ -28,14 +29,15 @@ function fileAppearance(path: string) {
   return { label: extension?.slice(0, 2).toUpperCase() || 'TX', color: '#a8a8b0' }
 }
 
-export function FilesPane({ active, files, onImportImage, onExport }: FilesPaneProps) {
+export function FilesPane({ active, files, onImportFile, onImportImage, onExport }: FilesPaneProps) {
   const [selectedFileName, setSelectedFileName] = useState('index.html')
-  const [importing, setImporting] = useState<ImageAssetKind | null>(null)
+  const [importing, setImporting] = useState<ImageAssetKind | 'file' | null>(null)
   const [importMessage, setImportMessage] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportMessage, setExportMessage] = useState<{ text: string; error: boolean } | null>(null)
   const iconInput = useRef<HTMLInputElement>(null)
   const backgroundInput = useRef<HTMLInputElement>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
   const selectedFile = files.find(file => file.name === selectedFileName) ?? files[0]
 
   const importSelectedImage = async (kind: ImageAssetKind, file?: File) => {
@@ -52,6 +54,22 @@ export function FilesPane({ active, files, onImportImage, onExport }: FilesPaneP
       setImporting(null)
       if (kind === 'icon' && iconInput.current) iconInput.current.value = ''
       if (kind === 'background' && backgroundInput.current) backgroundInput.current.value = ''
+    }
+  }
+
+  const importSelectedFile = async (file?: File) => {
+    if (!file) return
+    setImporting('file')
+    setImportMessage('')
+    try {
+      const path = await onImportFile(file)
+      setSelectedFileName(path)
+      setImportMessage(`${path} imported into the workspace.`)
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : 'Unable to import that file.')
+    } finally {
+      setImporting(null)
+      if (fileInput.current) fileInput.current.value = ''
     }
   }
 
@@ -80,7 +98,11 @@ export function FilesPane({ active, files, onImportImage, onExport }: FilesPaneP
         </button>
       </div>
       <div className="file-browser">
-        <div className="image-imports" aria-label="Import app images">
+        <div className="file-imports" aria-label="Import workspace files">
+          <button className="general-file-import" type="button" disabled={importing !== null} onClick={() => fileInput.current?.click()}>
+            <Icon name="file" size={16} />
+            <span><strong>File</strong><small>{importing === 'file' ? 'Importing…' : 'Choose any file'}</small></span>
+          </button>
           <button type="button" disabled={importing !== null} onClick={() => iconInput.current?.click()}>
             <Icon name="image" size={16} />
             <span><strong>Icon</strong><small>{importing === 'icon' ? 'Importing…' : 'Choose image'}</small></span>
@@ -89,6 +111,7 @@ export function FilesPane({ active, files, onImportImage, onExport }: FilesPaneP
             <Icon name="image" size={16} />
             <span><strong>Background</strong><small>{importing === 'background' ? 'Importing…' : 'Choose image'}</small></span>
           </button>
+          <input ref={fileInput} type="file" aria-label="Choose file to import" onChange={event => void importSelectedFile(event.target.files?.[0])} />
           <input ref={iconInput} type="file" accept="image/*,.ico" aria-label="Choose app icon" onChange={event => void importSelectedImage('icon', event.target.files?.[0])} />
           <input ref={backgroundInput} type="file" accept="image/*" aria-label="Choose app background" onChange={event => void importSelectedImage('background', event.target.files?.[0])} />
         </div>

@@ -16,6 +16,8 @@ test('exports workspace files as a flat-root zip without .agent files', () => {
     { name: 'index.html', content: '<h1>Weather</h1>' },
     { name: 'assets/app.js', content: 'document.body.dataset.ready = "true"' },
     { name: 'icon.png', content: 'data:image/png;base64,AQIDBA==', mimeType: 'image/png' },
+    { name: 'manual.pdf', content: 'data:application/pdf;base64,BQYHCA==', mimeType: 'application/pdf' },
+    { name: 'data.txt', content: 'data:text/plain;base64,keep-this-literal', mimeType: 'text/plain' },
     { name: '.agent/layla-sdk/SKILL.md', content: 'private skill instructions' },
     { name: '.agentless/readme.txt', content: 'include this similarly named folder' },
   ])
@@ -28,11 +30,15 @@ test('exports workspace files as a flat-root zip without .agent files', () => {
     '.agentless/readme.txt',
     'app.json',
     'assets/app.js',
+    'data.txt',
     'icon.png',
     'index.html',
+    'manual.pdf',
   ])
   assert.equal(strFromU8(entries['index.html']!), '<h1>Weather</h1>')
+  assert.equal(strFromU8(entries['data.txt']!), 'data:text/plain;base64,keep-this-literal')
   assert.deepEqual([...entries['icon.png']!], [1, 2, 3, 4])
+  assert.deepEqual([...entries['manual.pdf']!], [5, 6, 7, 8])
   assert.equal(workspaceZipFileName(snapshot.files), 'Weather - Now.zip')
   assert.match(bytesToBase64(createWorkspaceZip(exportFiles)), /^[A-Za-z0-9+/]+=*$/)
 })

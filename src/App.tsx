@@ -115,6 +115,23 @@ function readFileAsDataUrl(file: File) {
   })
 }
 
+const textFileExtensions = new Set([
+  'css', 'csv', 'htm', 'html', 'js', 'json', 'jsx', 'md', 'mjs', 'ts', 'tsx', 'txt', 'xml', 'yaml', 'yml',
+])
+
+function isTextFile(file: File) {
+  const mimeType = file.type.toLowerCase()
+  if (mimeType.startsWith('text/')) return true
+  if (
+    mimeType === 'application/json'
+    || mimeType === 'application/javascript'
+    || mimeType === 'application/xml'
+    || mimeType === 'application/xhtml+xml'
+  ) return true
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return textFileExtensions.has(extension)
+}
+
 function App({
   repository,
   workspaceId,
@@ -430,6 +447,17 @@ function App({
     return path
   }
 
+  const importFile = async (file: File) => {
+    const path = file.name
+    const text = isTextFile(file)
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+    const content = text ? await file.text() : await readFileAsDataUrl(file)
+    activeWorkspace.writeFile(path, content, {
+      mimeType: file.type || imageMimeTypes[extension] || (text ? undefined : 'application/octet-stream'),
+    })
+    return path
+  }
+
   const exportWorkspace = async () => {
     return saveWorkspaceZip(activeWorkspace.snapshot().files, layla.utils)
   }
@@ -492,6 +520,7 @@ function App({
         <FilesPane
           active={activeTab === 'files'}
           files={files}
+          onImportFile={importFile}
           onImportImage={importImage}
           onExport={exportWorkspace}
         />

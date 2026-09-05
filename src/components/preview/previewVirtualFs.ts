@@ -1,4 +1,4 @@
-import { exportableWorkspaceFiles, workspaceFileBytes } from '../../workspace/exportWorkspace.ts'
+import { exportableWorkspaceFiles, isStoredBinaryFile, workspaceFileBytes } from '../../workspace/exportWorkspace.ts'
 import type { VirtualWorkspaceFile, VirtualWorkspaceSnapshot } from '../../workspace/index.ts'
 import { injectPreviewBridge } from './previewBridge.ts'
 
@@ -97,7 +97,7 @@ export function previewFileUrl(baseUrl: URL, path: string) {
 }
 
 function responseBody(file: VirtualWorkspaceFile, content: string): BodyInit {
-  if (!file.mimeType.startsWith('image/')) return content
+  if (!isStoredBinaryFile(file)) return content
   return new Blob([workspaceFileBytes(file)], { type: file.mimeType })
 }
 

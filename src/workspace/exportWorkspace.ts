@@ -22,15 +22,27 @@ function decodeBase64(value: string) {
   return bytes
 }
 
+const textualApplicationMimeTypes = new Set([
+  'application/javascript',
+  'application/json',
+  'application/xhtml+xml',
+  'application/xml',
+])
+
+export function isStoredBinaryFile(file: VirtualWorkspaceFile) {
+  const isText = file.mimeType.startsWith('text/') || textualApplicationMimeTypes.has(file.mimeType)
+  return !isText && /^data:[^,]*?(;base64)?,/.test(file.content)
+}
+
 export function workspaceFileBytes(file: VirtualWorkspaceFile) {
-  if (file.mimeType.startsWith('image/')) {
-    const dataUrl = /^data:[^,]*?(;base64)?,([\s\S]*)$/.exec(file.content)
-    if (dataUrl) {
-      const payload = dataUrl[2] ?? ''
-      return dataUrl[1]
-        ? decodeBase64(payload.replace(/\s/g, ''))
-        : strToU8(decodeURIComponent(payload))
-    }
+  const dataUrl = isStoredBinaryFile(file)
+    ? /^data:[^,]*?(;base64)?,([\s\S]*)$/.exec(file.content)
+    : null
+  if (dataUrl) {
+    const payload = dataUrl[2] ?? ''
+    return dataUrl[1]
+      ? decodeBase64(payload.replace(/\s/g, ''))
+      : strToU8(decodeURIComponent(payload))
   }
 
   return strToU8(file.content)
