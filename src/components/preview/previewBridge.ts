@@ -133,11 +133,17 @@ const previewBridgeBootstrap = `<script>
 })();
 </script>`
 
+/** Phones use overlay scrollbars, so hide the desktop ones and keep the preview viewport a true 390px wide. */
+const previewMobileChrome = `<style>
+  html, body { scrollbar-width: none; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>`
+
 export function injectPreviewBridge(indexHtml: string) {
   const doctype = indexHtml.match(/^\s*<!doctype[^>]*>/i)
   const insertionPoint = doctype?.[0].length ?? 0
 
-  return `${indexHtml.slice(0, insertionPoint)}${previewBridgeBootstrap}${indexHtml.slice(insertionPoint)}`
+  return `${indexHtml.slice(0, insertionPoint)}${previewBridgeBootstrap}${previewMobileChrome}${indexHtml.slice(insertionPoint)}`
 }
 
 export function isPreviewBridgeRequest(value: unknown): value is PreviewBridgeRequest {

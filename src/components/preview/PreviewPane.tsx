@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Icon } from '../common/Icon'
 import { relayLaylaMessageToHost } from '../../lib/layla'
 import { PreviewLogsPanel, type PreviewLogEntry } from './PreviewLogsPanel'
@@ -19,6 +20,10 @@ type PreviewPaneProps = {
 
 const maxPreviewLogs = 500
 
+/** Logical viewport the preview lays out at, so mini-apps see a real phone size. */
+const deviceWidth = 390
+const deviceHeight = 844
+
 function echoPreviewLog(log: PreviewLogEntry) {
   const writer = log.level === 'error'
     ? console.error
@@ -38,7 +43,9 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
   const [logsOpen, setLogsOpen] = useState(false)
   const [logs, setLogs] = useState<PreviewLogEntry[]>([])
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const screenRef = useRef<HTMLDivElement>(null)
   const nextLogId = useRef(1)
+  const [deviceScale, setDeviceScale] = useState(1)
 
   useLayoutEffect(() => {
     const relayMessage = (event: MessageEvent<unknown>) => {
@@ -74,6 +81,21 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
     window.addEventListener('message', relayMessage)
     return () => window.removeEventListener('message', relayMessage)
   }, [])
+
+  // The mockup screen is far smaller than a phone, so scale the fixed-size viewport down to fit it.
+  useLayoutEffect(() => {
+    const screen = screenRef.current
+    if (!screen) return
+
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width
+      if (!width) return
+      setDeviceScale(width / deviceWidth)
+    })
+
+    observer.observe(screen)
+    return () => observer.disconnect()
+  }, [fullPreview])
 
   const refreshPreview = () => {
     setLogs([])
@@ -113,6 +135,12 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
     />
   )
 
+  const deviceStyle = {
+    '--device-width': `${deviceWidth}px`,
+    '--device-height': `${deviceHeight}px`,
+    '--device-scale': deviceScale,
+  } as CSSProperties
+
   if (fullPreview) {
     return (
       <section className="preview-pane fullscreen-preview" aria-label="Expanded preview">
@@ -145,9 +173,15 @@ export function PreviewPane({ active, indexHtml, refreshToken, workspace }: Prev
       </div>
       <div className="device-stage">
         <div className="device-frame">
-          <div className="device-speaker" />
-          <div className="device-screen">{preview}</div>
-          <div className="device-home" />
+          <span className="device-button device-button-action" />
+          <span className="device-button device-button-volume-up" />
+          <span className="device-button device-button-volume-down" />
+          <span className="device-button device-button-power" />
+          <div className="device-screen" ref={screenRef} style={deviceStyle}>
+            <div className="device-viewport">{preview}</div>
+            <div className="device-island" />
+            <div className="device-home" />
+          </div>
         </div>
       </div>
       {logsPanel}
