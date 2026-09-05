@@ -151,6 +151,8 @@ Layla listing metadata lives in `public/app.json`:
 
 ```text
 .
++-- .github/
+|   +-- workflows/release.yml       # Build and publish versioned GitHub releases
 +-- assets/                         # Preview video and store badge assets
 +-- docs/
 |   +-- ARCHITECTURE.md             # Original design and architecture notes
